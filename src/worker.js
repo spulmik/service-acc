@@ -10,6 +10,9 @@ export default {
     const email = url.searchParams.get("email");
     const position = url.searchParams.get("position");
 
+    
+    console.log("[HANDLER] ПОЛНЫЙ URL:", request.url);
+
 
     // ==========================================
     // ФИО В НИЖНИЙ РЕГИСТР
