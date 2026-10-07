@@ -106,7 +106,6 @@ export default {
       });
     }
 
-console.log("[ISPmanager] Почтовый ящик создан");
     }
     
     if ((needsmail || "").trim().toLowerCase() === "яндекс почта") {
@@ -114,30 +113,14 @@ console.log("[ISPmanager] Почтовый ящик создан");
       domainname = "energy-team.ru";
       access = "u";
 
-      // ------------------------------------------
-      // Получаем пользователей Яндекс 360
-      // ------------------------------------------
       const yandexUsersResult = await getMailboxesnameYandex(env);
 
-      // ------------------------------------------
-      // Получаем первый свободный UUID
-      // Например для Летуаль:
-      // u02001, u02002, u02003...
-      // ------------------------------------------
       uuid = getNextUuidYandex(
         yandexUsersResult,
         access,
         projectId
       );
-
-      // ------------------------------------------
-      // Формируем логин
-      // ------------------------------------------
       username = access + projectId + uuid;
-
-      // ------------------------------------------
-      // Генерируем пароль
-      // ------------------------------------------
       mailboxPassword = generatePassword(16);
 
       console.log("[YANDEX] Username:", username);
@@ -150,30 +133,22 @@ console.log("[ISPmanager] Почтовый ящик создан");
         `https://api360.yandex.net/directory/v1/org/${env.YANDEX_ORG_ID}/users`,
         {
           method: "POST",
-
           headers: {
             "Authorization": `OAuth ${env.YANDEX_TOKEN}`,
             "Content-Type": "application/json"
           },
-
           body: JSON.stringify({
             nickname: username,
             departmentId: 1,
-
             name: {
               first: name,
               last: surname,
               middle: patronymic
             },
-
             position: position,
-
             password: mailboxPassword,
-
             passwordChangeRequired: false,
-
             language: "ru",
-
             timezone: "Europe/Moscow"
           })
         }
@@ -193,10 +168,6 @@ console.log("[ISPmanager] Почтовый ящик создан");
         "[YANDEX] Ответ:",
         JSON.stringify(yandexCreatedUser)
       );
-
-      // ------------------------------------------
-      // Проверяем ошибку
-      // ------------------------------------------
       if (!yandexResponse.ok) {
 
         console.log(
@@ -213,7 +184,7 @@ console.log("[ISPmanager] Почтовый ящик создан");
       }
 
       // ------------------------------------------
-      // Получаем настоящий email,
+      // Получаем email,
       // который вернул Яндекс
       // ------------------------------------------
       const createdEmail =
@@ -248,15 +219,6 @@ console.log("[ISPmanager] Почтовый ящик создан");
     console.log("[HANDLER] Фамилия ENG:", surnameEng);
     console.log("[HANDLER] Имя ENG:", nameEng);
     console.log("[HANDLER] Отчество ENG:", patronymicEng);
-
-    // ==========================================
-    // СПИСОК ДОЛЖНОСТЕЙ
-    // ==========================================
-
-
-  
-
-
     return new Response("OK", {
       status: 200
     });

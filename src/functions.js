@@ -228,3 +228,7 @@ export function getNextUuid(result, access, projectId) {
   );
       
 }
+
+
+// Cloud Contact
+

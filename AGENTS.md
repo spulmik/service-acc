@@ -16,6 +16,7 @@ For all limits and quotas, retrieve from the product's `/platform/limits/` page.
 | `npx wrangler dev` | Local development |
 | `npx wrangler deploy` | Deploy to Cloudflare |
 | `npx wrangler types` | Generate TypeScript types |
+| `npx wrangler secret put __`| put secret in your project
 
 Run `wrangler types` after changing bindings in wrangler.jsonc.
 
