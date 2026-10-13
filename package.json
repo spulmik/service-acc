@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "wrangler": "^4.126.0"
+  },
+  "dependencies": {
+    "element-plus": "^2.14.7"
   }
 }
