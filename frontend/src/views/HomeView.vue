@@ -3,18 +3,37 @@
     <el-card class="panel">
       <template #header>
         <div class="card-header">
-          <strong>Service ACC</strong>
-          <el-tag type="success">Vue работает</el-tag>
+          <strong>Реестр управления УЗ</strong>
         </div>
+        <el-tabs v-model="activeName" class="tabs" @tab-click="handleClick">
+          <el-tab-pane></el-tab-pane>
+          <el-tab-pane label="Яндекс" name="Yandex">YandexWindow</el-tab-pane>
+          <el-tab-pane label="Рег" name="Reg">RegWindow</el-tab-pane>
+          <el-tab-pane label="CloudContact" name="CloudContact">CloudContactWindow</el-tab-pane>
+          <el-tab-pane label="ВПН" name="OpenVpn">OpenVpnWindow</el-tab-pane>
+        </el-tabs>
       </template>
+      
+
+        <style>
+        .demo-tabs > .el-tabs__content {
+          padding: 32px;
+          color: #6b778c;
+          font-size: 32px;
+          font-weight: 600;
+        }
+        </style>
+
 
       <h1>Панель управления</h1>
-
-      <p>Vue-приложение успешно загружено.</p>
-
+<!-- 
       <el-button type="primary" @click="showMessage">
         Проверить интерфейс
-      </el-button>
+      </el-button> -->
+      <el-alert
+        v-if="checked"
+        title="тест">
+      </el-alert>
 
       <el-alert
         v-if="checked"
@@ -29,7 +48,11 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+  import { ref } from 'vue'
+  const activeName = ref('tabs')
+  const handleClick = (tab, event) => {
+    console.log(tab, event)
+  }
 
 const checked = ref(false);
 
@@ -37,16 +60,18 @@ function showMessage() {
   checked.value = true;
 }
 </script>
-
 <style scoped>
 .page {
-  padding: 32px;
+  width: 100%;
+  min-height: 100vh;
+  padding: clamp(12px, 2vw, 32px);
   background: #f5f7fa;
 }
 
 .panel {
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .card-header {
