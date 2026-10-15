@@ -1,33 +1,36 @@
-
 {
-  "name": "service-acc",
-  "main": "src/worker.js",
-  "workers_dev": true,
-  "preview_urls": false,
-  "compatibility_date": "2026-08-26",
-  "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1,
-    "redact_query_string": false,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true
-    },
-    "traces": {
-      "enabled": false,
-      "persist": true,
-      "head_sampling_rate": 1
-    }
-  },
-  "assets": {
-    "directory": "./frontend/dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/webhooks",
-      "/webhooks/*"
-    ]
-  }
+	"name": "service-acc",
+	"main": "src/worker.js",
+	"workers_dev": true,
+	"preview_urls": false,
+	"compatibility_date": "2026-08-26",
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"redact_query_string": true,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": false,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
+	"assets": {
+		"directory": "./frontend/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true
+	},
+	"kv_namespaces": [
+		{
+			"binding": "BITRIX_INSTALLS",
+			"id": "57f5bd81e9b242049d3c46d9155dced0",
+			"remote": true
+		}
+	]
 }
