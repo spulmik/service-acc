@@ -2,13 +2,13 @@ import {
   getCreateEmployeeAccountDefinition,
 } from "./createEmployeeAccount.js";
 
-// import {
-//   getInviteUserToGroupDefinition,
-// } from "./inviteUserToGroup.js";
+import {
+  getChatsList,
+} from "./ChatsB24.js";
 
-export function getActivityDefinitions(origin, chatOptions = {}) {
+export function getActivityDefinitions(origin) {
   return [
     getCreateEmployeeAccountDefinition(origin),
-    // getInviteUserToGroupDefinition(origin, chatOptions),
+    getChatsList(origin),
   ];
 }

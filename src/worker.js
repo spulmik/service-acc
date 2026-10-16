@@ -1,6 +1,11 @@
 import { handleInstallRequest } from "../install.js";
 // По исходке, старый вариант
 // import { handleWebhook } from "./webhooks/handler.js";
+import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
+import {
+  handlePullChatsOptions,
+} from "./activities/rest/pull_chats_options/handler.js";
+
 
 import {
   handleAuthRoute,
@@ -61,18 +66,30 @@ export default {
 
       // 2. Установка приложения Bitrix24.
       // Реализуем в корневом файле install.js следующим шагом.
-    if (pathname === "/install") {
-      return handleInstallRequest(request, env);
-    }
+      // Установка приложения Bitrix24.
+      if (pathname === "/install") {
+        return handleInstallRequest(request);
+      }
 
-    if (pathname === "/webhooks/activity") {
-      return new Response("Activity handler is not implemented yet", {
-        status: 501,
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-        },
-      });
-    }
+      // Получение списка коллабов.
+      if (
+        pathname === "/activities/rest/pull_chats_options/handler.js"
+      ) {
+        return handlePullChatsOptions(request);
+      }
+
+      // Создание почты уз через вебхук
+        if (
+          pathname === "/activities/rest/create_mailbox/handler.js"
+        ) {
+          console.log("[ROUTER] Маршрут создания почты:", {
+            pathname,
+            method: request.method,
+            timestamp: new Date().toISOString(),
+          });
+
+          return handleCreateMailbox(request, env, ctx);
+        }
 
     // Остальные webhook-маршруты пока закрыты.
     if (

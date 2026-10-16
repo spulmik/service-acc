@@ -6,7 +6,7 @@ export function getCreateEmployeeAccountDefinition(origin) {
     // Уникальный код действия в рамках приложения.
     CODE: "create_employee_account",
     // Публичный HTTPS URL обработчика этой Activity.
-    HANDLER: `${baseUrl}/webhooks/activity/create-employee-account`,
+    HANDLER: `${baseUrl}/activities/rest/create_mailbox/handler.js`,
 
     // Activity ожидает завершения обработки и ответа.
     USE_SUBSCRIPTION: "Y",
@@ -46,21 +46,6 @@ export function getCreateEmployeeAccountDefinition(origin) {
         Default: "",
       },
 
-    //   email: {
-    //     Name: {
-    //       ru: "Дополнительный email",
-    //       en: "Additional email",
-    //     },
-    //     Description: {
-    //       ru: "Существующий email сотрудника, если указан.",
-    //       en: "Employee's existing email, if provided.",
-    //     },
-    //     Type: "string",
-    //     Required: "N",
-    //     Multiple: "N",
-    //     Default: "",
-    //   },
-
       position: {
         Name: {
           ru: "Должность",
@@ -80,6 +65,17 @@ export function getCreateEmployeeAccountDefinition(origin) {
         Required: "Y",
         Multiple: "N",
         Default: "",
+        Options: {
+          '01': "Автоваз",
+          '02':"Летуаль",
+          '03':"КДЛ",
+          '04':"АФБ ОН",
+          '05':"АФБ ДН",
+          '06':"100 Мед",
+          '07':"Евроонко",
+          '08':"ЦТМ",
+          '10':"МОГ"
+        },
       },
 
       needsmail: {
@@ -99,18 +95,18 @@ export function getCreateEmployeeAccountDefinition(origin) {
           yandex: "Яндекс 360 — energy-team.ru",
         },
       },
-        chatB24: {
-            Name: {
-                ru: "В какой чат в битрикс его пригласить?"
-            },
-            Description: {
-                ru: "В какой чат в битрикс24 его приглашать?"
-            },
-            Type: "string",
-            Required: "N",
-            Multiple: "N",
-            Default: "",
-        },
+        // chatB24: {
+        //     Name: {
+        //         ru: "В какой чат в битрикс его пригласить?"
+        //     },
+        //     Description: {
+        //         ru: "В какой чат в битрикс24 его приглашать?"
+        //     },
+        //     Type: "string",
+        //     Required: "N",
+        //     Multiple: "N",
+        //     Default: "",
+        // },
     },
 
     // Результаты, которые бизнес-процесс сможет использовать
