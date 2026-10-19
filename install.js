@@ -1,5 +1,36 @@
 import { getActivityDefinitions } from "./src/activities/index.js";
 
+// Страница, которую Bitrix24 открывает в iframe при первоначальной установке.
+// Она обязательно должна вызвать BX24.installFinish(), иначе установка
+// не завершится (вместо неё будет пустое окно).
+function installFinishPage() {
+  const html = `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Установка</title>
+  <script src="//api.bitrix24.com/api/v1/"></script>
+</head>
+<body>
+  <p>Завершение установки…</p>
+  <script>
+    BX24.init(function () {
+      BX24.installFinish();
+    });
+  </script>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 async function bitrixCall(clientEndpoint, method, accessToken, params = {}) {
   const response = await fetch(
     new URL(method, clientEndpoint),
@@ -95,12 +126,17 @@ const definitions = getActivityDefinitions(origin);
 }
 
 export async function handleInstallRequest(request) {
-  console.log("[INSTALL] Начало установки");
+  console.log("[INSTALL] Начало установки", { method: request.method });
+
+  // GET: страница завершения установки (на случай открытия без POST).
+  if (request.method === "GET") {
+    return installFinishPage();
+  }
 
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", {
       status: 405,
-      headers: { Allow: "POST" },
+      headers: { Allow: "GET, POST" },
     });
   }
 
@@ -110,7 +146,13 @@ export async function handleInstallRequest(request) {
 
     const body = await request.text();
 
-    if (!body || body.length > 65536) {
+    // Пустой POST — это открытие iframe установки.
+    if (!body) {
+      console.log("[INSTALL] Открытие страницы установки (пустое тело)");
+      return installFinishPage();
+    }
+
+    if (body.length > 65536) {
       return new Response("Invalid request body", {
         status: 400,
       });
@@ -137,10 +179,13 @@ export async function handleInstallRequest(request) {
       payload.auth = auth;
     }
 
+    // Любой POST без события ONAPPINSTALL — это открытие iframe
+    // первоначальной установки. Отдаём HTML с BX24.installFinish(),
+    // а не текст "OK" (иначе в окне Bitrix24 будет чёрный экран).
     if (payload.event !== "ONAPPINSTALL") {
-      console.log("[INSTALL] Событие пропущено:", payload.event);
+      console.log("[INSTALL] Открытие страницы установки (iframe)");
 
-      return new Response("OK", { status: 200 });
+      return installFinishPage();
     }
 
     const auth = payload.auth || {};
