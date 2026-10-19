@@ -1,5 +1,8 @@
 import { handleInstallRequest } from "../install.js";
-import { getMailboxesnameYandex } from "./functions.js";
+import {
+  getMailboxesnameYandex,
+  deleteYandexUser,
+} from "./functions.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
 import {
@@ -197,64 +200,17 @@ async function handleRequest(request, env, ctx) {
           "/api/yandex/users/".length,
         );
 
-        // Принимаем только числовой ID.
-        if (!/^\d+$/.test(userId)) {
-          return jsonAuthResponse(
-            { error: "Некорректный ID пользователя" },
-            400,
-          );
-        }
-
-        if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
-          return jsonAuthResponse(
-            { error: "Не настроены параметры Яндекс 360" },
-            500,
-          );
-        }
-
         try {
-          const yandexUrl =
-            `https://api360.yandex.net/directory/v1/org/` +
-            `${encodeURIComponent(env.YANDEX_ORG_ID)}/users/` +
-            `${encodeURIComponent(userId)}`;
-
-          const response = await fetch(yandexUrl, {
-            method: "DELETE",
-            headers: {
-              Authorization: `OAuth ${env.YANDEX_TOKEN}`,
-              Accept: "application/json",
-            },
-            signal: AbortSignal.timeout(20000),
-          });
-
-          if (!response.ok) {
-            const data = await response.json().catch(() => null);
-
-            console.error("[API YANDEX DELETE] Ошибка:", {
-              status: response.status,
-              userId,
-              code: data?.code || data?.error || "UNKNOWN",
-            });
-
-            return jsonAuthResponse(
-              {
-                error: "Не удалось удалить пользователя Яндекс 360",
-              },
-              502,
-            );
-          }
+          const result = await deleteYandexUser(env, userId);
 
           console.log("[API YANDEX DELETE] Пользователь удалён:", {
             userId,
             username: session.username,
           });
 
-          return jsonAuthResponse({
-            success: true,
-            userId,
-          });
+          return jsonAuthResponse(result);
         } catch (error) {
-          console.error("[API YANDEX DELETE] Ошибка запроса:", {
+          console.error("[API YANDEX DELETE] Ошибка:", {
             userId,
             message:
               error instanceof Error
@@ -263,7 +219,7 @@ async function handleRequest(request, env, ctx) {
           });
 
           return jsonAuthResponse(
-            { error: "Ошибка соединения с Яндекс 360" },
+            { error: "Не удалось удалить пользователя Яндекс 360" },
             502,
           );
         }

@@ -306,4 +306,46 @@ export function getNextUuid(result, access, projectId) {
   );
 }
 
+// ==========================================
+// Удаление пользователя из Яндекс 360
+// ==========================================
+export async function deleteYandexUser(env, userId) {
+  if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
+    throw new Error("Не настроены параметры Яндекс 360");
+  }
+
+  // Принимаем только числовой ID
+  if (!/^\d+$/.test(String(userId))) {
+    throw new Error("Некорректный ID пользователя");
+  }
+
+  const yandexUrl =
+    `https://api360.yandex.net/directory/v1/org/` +
+    `${encodeURIComponent(env.YANDEX_ORG_ID)}/users/` +
+    `${encodeURIComponent(userId)}`;
+
+  const response = await fetch(yandexUrl, {
+    method: "DELETE",
+    headers: {
+      Authorization: `OAuth ${env.YANDEX_TOKEN}`,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+
+    throw new Error(
+      `Не удалось удалить пользователя: HTTP ${response.status}, ` +
+      `код: ${data?.code || data?.error || "UNKNOWN"}`
+    );
+  }
+
+  return {
+    success: true,
+    userId,
+  };
+}
+
 // Cloud Contact

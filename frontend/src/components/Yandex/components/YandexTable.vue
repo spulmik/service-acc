@@ -16,6 +16,17 @@
         :prefix-icon="Search"
         class="search-input"
       />
+      <el-button
+        :loading="loading"
+        @click="addYandexUser"
+        icon=""><el-icon><Plus /></el-icon>
+      </el-button>
+      <el-button
+          :loading="loading"
+          @click="loadUsers"
+        >
+          Обновить список
+       </el-button>
     </div>
 
     <el-alert
@@ -79,12 +90,6 @@
     </el-table>
 
     <div class="table-footer">
-      <el-button
-        :loading="loading"
-        @click="loadUsers"
-      >
-        Обновить список
-      </el-button>
     </div>
   </section>
 </template>
@@ -92,7 +97,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Plus } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/Yandex/users.js'
 import YandexDelete from './YandexDelete.vue'
 
