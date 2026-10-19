@@ -80,35 +80,51 @@ export const projectMapping = {
     // ==========================================
     // Получаем пользователей из Яндекс 360
     // ==========================================
-export async function getMailboxesnameYandex(env) {
-
-    const response = await fetch(
-        `https://api360.yandex.net/directory/v1/org/${env.YANDEX_ORG_ID}/users?page=1&perPage=1000`,
-        {
-          method: "GET",
-          headers: {
-            "Authorization": `OAuth ${env.YANDEX_TOKEN}`,
-            "Content-Type": "application/json"
-          }
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-
-        console.log("[YANDEX] HTTP ошибка:", response.status);
-        console.log("[YANDEX] Ответ:", errorText);
-
-        throw new Error(`Yandex API HTTP ${response.status}`);
+    export async function getMailboxesnameYandex(env) {
+      if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
+        throw new Error("Не настроены параметры Яндекс 360");
       }
 
-    const result = await response.json();
+      const url = new URL(
+        `https://api360.yandex.net/directory/v1/org/${encodeURIComponent(env.YANDEX_ORG_ID)}/users`
+      );
 
-    console.log("[YANDEX] Всего пользователей:", result.total);
-    console.log("[YANDEX] Получено:", result.users?.length || 0);
+      url.searchParams.set("page", "1");
+      url.searchParams.set("perPage", "1000");
 
-    return result;
-}
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Authorization: `OAuth ${env.YANDEX_TOKEN}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(20000),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        console.error("[YANDEX] Ошибка получения пользователей:", {
+          status: response.status,
+          code: result?.code || result?.error || "UNKNOWN",
+        });
+
+        throw new Error(
+          `Не удалось получить пользователей Яндекс 360: HTTP ${response.status}`
+        );
+      }
+
+      if (!result || !Array.isArray(result.users)) {
+        console.error("[YANDEX] Неожиданный формат ответа API");
+
+        throw new Error("Некорректный ответ от Яндекс 360");
+      }
+
+      console.log("[YANDEX] Всего пользователей:", result.total);
+      console.log("[YANDEX] Получено:", result.users.length);
+
+      return result;
+    }
  
     // ==========================================
     // Ищем нужный UUID в Яндекс 360
