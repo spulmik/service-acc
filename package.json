@@ -11,6 +11,7 @@
     "wrangler": "^4.126.0"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "element-plus": "^2.14.7"
   }
 }

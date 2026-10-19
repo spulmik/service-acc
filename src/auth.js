@@ -1,6 +1,10 @@
 const COOKIE_NAME = "service_acc_session";
 const SESSION_TTL_SECONDS = 8 * 60 * 60; // 8 часов
 
+// Ограничение подбора пароля: счётчик неудачных попыток по IP (KV).
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_BLOCK_SECONDS = 15 * 60;
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -12,7 +16,14 @@ function jsonResponse(data, status = 200, extraHeaders = {}) {
   });
 
   for (const [key, value] of Object.entries(extraHeaders)) {
-    headers.set(key, value);
+    // Массив значений нужен, например, для нескольких Set-Cookie.
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        headers.append(key, item);
+      }
+    } else {
+      headers.set(key, value);
+    }
   }
 
   return new Response(JSON.stringify(data), {
@@ -50,18 +61,26 @@ function getAuthConfig(env) {
 
   const users = Object.create(null);
 
-  for (const [username, password] of Object.entries(parsedUsers)) {
+  for (const [username, passwordHash] of Object.entries(parsedUsers)) {
     const normalizedUsername = username.trim().toLowerCase();
 
     if (
       !normalizedUsername ||
-      typeof password !== "string" ||
-      password.length === 0
+      typeof passwordHash !== "string" ||
+      passwordHash.length === 0
     ) {
       throw new Error("Invalid user configuration");
     }
 
-    users[normalizedUsername] = password;
+    // Проверяем, что это bcrypt хэш ($2a$, $2b$ или $2y$)
+    if (!/^\$2[aby]\$\d{2}\$.{53}$/.test(passwordHash)) {
+      throw new Error(
+        `Invalid bcrypt hash for user "${normalizedUsername}". ` +
+        `Use: echo -n "password" | npx bcrypt-cli`
+      );
+    }
+
+    users[normalizedUsername] = passwordHash;
   }
 
   if (Object.keys(users).length === 0) {
@@ -74,24 +93,12 @@ function getAuthConfig(env) {
   };
 }
 
-async function passwordsMatch(suppliedPassword, savedPassword) {
-  // Сравниваем SHA-256-дайджесты одинаковой длины,
-  // а не строки паролей напрямую.
-  const [suppliedDigest, savedDigest] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(suppliedPassword)),
-    crypto.subtle.digest("SHA-256", encoder.encode(savedPassword)),
-  ]);
+// Bcrypt verification для Cloudflare Workers
+async function verifyBcrypt(password, hash) {
+  // Импортируем bcrypt.js динамически (совместим с Workers)
+  const bcrypt = await import("bcryptjs");
 
-  const a = new Uint8Array(suppliedDigest);
-  const b = new Uint8Array(savedDigest);
-
-  let difference = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    difference |= a[i] ^ b[i];
-  }
-
-  return difference === 0;
+  return bcrypt.compare(password, hash);
 }
 
 function bytesToBase64Url(bytes) {
@@ -212,52 +219,80 @@ async function verifySessionToken(token, config) {
   }
 }
 
-function getCookie(request, cookieName) {
-  const cookies = request.headers.get("Cookie") || "";
+// Возвращает ВСЕ значения cookie с таким именем.
+// Если в браузере остались старая (не partitioned) и новая cookie
+// с одним именем, проверяем обе.
+function getCookieValues(request, cookieName) {
+  const header = request.headers.get("Cookie") || "";
+  const values = [];
 
-  const escapedName = cookieName.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
+  for (const part of header.split(";")) {
+    const index = part.indexOf("=");
 
-  const match = cookies.match(
-    new RegExp(`(?:^|;\\s*)${escapedName}=([^;]*)`),
-  );
+    if (index === -1) {
+      continue;
+    }
 
-  return match ? match[1] : null;
+    if (part.slice(0, index).trim() === cookieName) {
+      values.push(part.slice(index + 1).trim());
+    }
+  }
+
+  return values;
+}
+
+function isHttps(request) {
+  return new URL(request.url).protocol === "https:";
+}
+
+// Приложение открывается в iframe Bitrix24, то есть в КРОСС-САЙТОВОМ
+// контексте. Cookie с SameSite=Strict/Lax в таком контексте не
+// сохраняются и не отправляются, поэтому нужен SameSite=None; Secure.
+// Атрибут Partitioned (CHIPS) привязывает cookie к сайту верхнего уровня
+// (портал Bitrix24): так она работает даже при блокировке сторонних
+// cookie и недоступна другим сайтам.
+function cookieSuffix(request) {
+  return isHttps(request)
+    ? "; Secure; SameSite=None; Partitioned"
+    : "; SameSite=Lax"; // локальная разработка по http://localhost
 }
 
 function makeSessionCookie(request, token) {
-  const secure =
-    new URL(request.url).protocol === "https:" ? "; Secure" : "";
-
-  return [
-    `${COOKIE_NAME}=${token}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Strict",
-    `Max-Age=${SESSION_TTL_SECONDS}`,
-  ].join("; ") + secure;
-}
-
-function clearSessionCookie(request) {
-  const secure =
-    new URL(request.url).protocol === "https:" ? "; Secure" : "";
-
   return (
-    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` +
-    secure
+    `${COOKIE_NAME}=${token}; Path=/; HttpOnly; ` +
+    `Max-Age=${SESSION_TTL_SECONDS}` +
+    cookieSuffix(request)
   );
 }
 
-async function readSession(request, config) {
-  const token = getCookie(request, COOKIE_NAME);
+function clearSessionCookies(request) {
+  const cookies = [
+    `${COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0` +
+      cookieSuffix(request),
+  ];
 
-  if (!token) {
-    return null;
+  // Прежняя версия ставила cookie с SameSite=Strict без Partitioned.
+  // Это другая cookie, её нужно удалять отдельно.
+  cookies.push(
+    `${COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0` +
+      (isHttps(request)
+        ? "; Secure; SameSite=Strict"
+        : "; SameSite=Strict"),
+  );
+
+  return cookies;
+}
+
+async function readSession(request, config) {
+  for (const token of getCookieValues(request, COOKIE_NAME)) {
+    const session = await verifySessionToken(token, config);
+
+    if (session) {
+      return session;
+    }
   }
 
-  return verifySessionToken(token, config);
+  return null;
 }
 
 export async function getAuthenticatedSession(request, env) {
@@ -265,8 +300,82 @@ export async function getAuthenticatedSession(request, env) {
     const config = getAuthConfig(env);
 
     return await readSession(request, config);
-  } catch {
+  } catch (error) {
+    // Не логируем детали конфигурации (могут содержать секреты)
+    console.error("[AUTH] Session verification failed");
+
     return null;
+  }
+}
+
+// -----------------------------------------------------
+// ОГРАНИЧЕНИЕ ПОДБОРА ПАРОЛЯ
+// -----------------------------------------------------
+// KV работает с задержкой синхронизации, поэтому это защита
+// «по возможности». Основную защиту добавьте правилом
+// Rate limiting в Cloudflare WAF:
+//
+// Dashboard → Security → WAF → Rate Limiting Rules
+// Rule: POST /auth/login
+// Rate: 5 requests per minute per IP
+// Action: Challenge (Managed Challenge)
+//
+// Это обязательная мера для production.
+
+function loginFailureKey(request) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+
+  return `login-fail:${ip}`;
+}
+
+async function isLoginBlocked(env, request) {
+  if (!env.BITRIX_APP_CONFIG) {
+    return false;
+  }
+
+  try {
+    const value = await env.BITRIX_APP_CONFIG.get(
+      loginFailureKey(request),
+    );
+
+    return Number(value || 0) >= LOGIN_MAX_FAILURES;
+  } catch {
+    return false;
+  }
+}
+
+async function registerLoginFailure(env, request) {
+  if (!env.BITRIX_APP_CONFIG) {
+    return;
+  }
+
+  try {
+    const key = loginFailureKey(request);
+    const count = Number((await env.BITRIX_APP_CONFIG.get(key)) || 0) + 1;
+
+    await env.BITRIX_APP_CONFIG.put(key, String(count), {
+      expirationTtl: LOGIN_BLOCK_SECONDS,
+    });
+
+    // Логируем только IP и счётчик (без чувствительных данных)
+    console.warn("[AUTH] Login failure registered:", {
+      ip: request.headers.get("CF-Connecting-IP") || "unknown",
+      attempts: count,
+    });
+  } catch (error) {
+    console.error("[AUTH] Failed to register login failure");
+  }
+}
+
+async function clearLoginFailures(env, request) {
+  if (!env.BITRIX_APP_CONFIG) {
+    return;
+  }
+
+  try {
+    await env.BITRIX_APP_CONFIG.delete(loginFailureKey(request));
+  } catch {
+    // Игнорируем.
   }
 }
 
@@ -289,7 +398,7 @@ export async function handleAuthRoute(request, env, pathname) {
     return jsonResponse(
       { authenticated: false },
       200,
-      { "Set-Cookie": clearSessionCookie(request) },
+      { "Set-Cookie": clearSessionCookies(request) },
     );
   }
 
@@ -313,6 +422,19 @@ export async function handleAuthRoute(request, env, pathname) {
     const config = getAuthConfig(env);
 
     if (pathname === "/auth/login") {
+      if (await isLoginBlocked(env, request)) {
+        console.warn("[AUTH] Login blocked: too many attempts");
+
+        return jsonResponse(
+          {
+            error:
+              "Слишком много неудачных попыток входа. Повторите позже.",
+          },
+          429,
+          { "Retry-After": String(LOGIN_BLOCK_SECONDS) },
+        );
+      }
+
       let body;
 
       try {
@@ -339,30 +461,35 @@ export async function handleAuthRoute(request, env, pathname) {
         username,
       );
 
-      // Для неизвестного пользователя выполняется сравнение
-      // с фиктивным значением, чтобы не различать ответы по времени.
-      const savedPassword = userExists
+      // Для неизвестного пользователя выполняется проверка
+      // с фиктивным хэшем, чтобы не различать ответы по времени.
+      const savedHash = userExists
         ? config.users[username]
-        : "invalid-user-password";
+        : "$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
-      const passwordIsValid = await passwordsMatch(
-        password,
-        savedPassword,
-      );
+      const passwordIsValid = password && userExists
+        ? await verifyBcrypt(password, savedHash)
+        : false;
 
-      if (!userExists || !password || !passwordIsValid) {
+      if (!passwordIsValid) {
+        await registerLoginFailure(env, request);
+
+        // Не раскрываем, что именно неверно (логин или пароль)
         return jsonResponse(
           { error: "Неверный логин или пароль" },
           401,
         );
       }
 
+      await clearLoginFailures(env, request);
+
       const token = await createSessionToken(
         username,
         config.secret,
       );
 
-      console.log("[AUTH] Успешный вход:", username);
+      // Логируем только username (без пароля/хэша/токена)
+      console.log("[AUTH] Successful login:", username);
 
       return jsonResponse(
         {
@@ -397,10 +524,8 @@ export async function handleAuthRoute(request, env, pathname) {
       404,
     );
   } catch (error) {
-    console.error(
-      "[AUTH] Ошибка конфигурации:",
-      error instanceof Error ? error.message : "Unknown error",
-    );
+    // Не раскрываем детали ошибки конфигурации
+    console.error("[AUTH] Configuration error");
 
     return jsonResponse(
       { error: "Авторизация не настроена на сервере" },

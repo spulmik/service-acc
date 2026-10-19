@@ -1,4 +1,3 @@
-
 import { handleInstallRequest } from "../install.js";
 import { getMailboxesnameYandex } from "./functions.js";
 
@@ -13,233 +12,327 @@ import {
   jsonAuthResponse,
 } from "./auth.js";
 
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-    console.log("[ROUTER] Входящий запрос:", {
-      method: request.method,
-      pathname,
-      timestamp: new Date().toISOString(),
-    });
+function normalizeHost(value) {
+  const host = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split(/[/?#]/)[0];
 
-    try {
-      // Bitrix24 открывает серверное приложение через POST.
-      // Возвращаем HTML Vue SPA вместо передачи POST в Assets.
-      if (
-        pathname === "/" &&
-        request.method === "POST" &&
-        url.searchParams.has("DOMAIN") &&
-        url.searchParams.has("APP_SID")
-      ) {
-        const domain = url.searchParams.get("DOMAIN");
+  return /^[a-z0-9.-]+$/.test(host) ? host : "";
+}
 
-        console.log("[BITRIX UI] Открытие интерфейса:", {
-          domain,
-          lang: url.searchParams.get("LANG"),
-          timestamp: new Date().toISOString(),
-        });
+// Защита от CSRF. Cookie теперь SameSite=None (нужно для iframe),
+// поэтому для изменяющих запросов проверяем, что они пришли
+// с нашего же origin.
+function isSameOriginRequest(request, url) {
+  const origin = request.headers.get("Origin");
 
-        const headers = new Headers(request.headers);
-        headers.delete("content-length");
-        headers.delete("content-type");
-        headers.set("accept", "text/html");
+  if (origin) {
+    return origin === url.origin;
+  }
 
-        const assetRequest = new Request(url.toString(), {
-          method: "GET",
-          headers,
-        });
+  return request.headers.get("Sec-Fetch-Site") === "same-origin";
+}
 
-        return env.ASSETS.fetch(assetRequest);
-      }
+// Разрешаем встраивать приложение в iframe только на портале Bitrix24
+// (защита от clickjacking). Домен берётся из BITRIX_ALLOWED_DOMAIN.
+function getFrameAncestors(env) {
+  const domain = normalizeHost(env.BITRIX_ALLOWED_DOMAIN);
 
-      // 1. Маршруты авторизации.
-      const authResponse = await handleAuthRoute(
-        request,
-        env,
+  if (domain) {
+    return `'self' https://${domain}`;
+  }
+
+  return "'self' https://*.bitrix24.ru https://*.bitrix24.com";
+}
+
+function withSecurityHeaders(response, env) {
+  // Заголовки ответа из ASSETS.fetch() неизменяемы, поэтому
+  // создаём копию ответа.
+  const secured = new Response(response.body, response);
+
+  secured.headers.set("X-Content-Type-Options", "nosniff");
+  secured.headers.set("Referrer-Policy", "same-origin");
+  secured.headers.set(
+    "Content-Security-Policy",
+    `frame-ancestors ${getFrameAncestors(env)}`,
+  );
+
+  return secured;
+}
+
+// В браузер отдаём только те поля, которые нужны интерфейсу.
+function toPublicYandexUser(user) {
+  return {
+    id: user?.id,
+    nickname: user?.nickname || "",
+    email: user?.email || "",
+    name: {
+      first: user?.name?.first || "",
+      last: user?.name?.last || "",
+      middle: user?.name?.middle || "",
+    },
+  };
+}
+
+async function handleRequest(request, env, ctx) {
+  const url = new URL(request.url);
+  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+  console.log("[ROUTER] Входящий запрос:", {
+    method: request.method,
+    pathname,
+    timestamp: new Date().toISOString(),
+  });
+
+  try {
+    // Bitrix24 открывает серверное приложение через POST.
+    // Возвращаем HTML Vue SPA вместо передачи POST в Assets.
+    if (
+      pathname === "/" &&
+      request.method === "POST" &&
+      url.searchParams.has("DOMAIN") &&
+      url.searchParams.has("APP_SID")
+    ) {
+      const domain = url.searchParams.get("DOMAIN");
+
+      console.log("[BITRIX UI] Открытие интерфейса:", {
+        domain,
+        lang: url.searchParams.get("LANG"),
+        timestamp: new Date().toISOString(),
+      });
+
+      const headers = new Headers(request.headers);
+      headers.delete("content-length");
+      headers.delete("content-type");
+      headers.set("accept", "text/html");
+
+      const assetRequest = new Request(url.toString(), {
+        method: "GET",
+        headers,
+      });
+
+      return env.ASSETS.fetch(assetRequest);
+    }
+
+    // CSRF-проверка для всех изменяющих запросов к /auth и /api.
+    // Серверные вызовы Bitrix24 (/install, /activities/...) сюда не попадают.
+    const isAuthOrApi =
+      pathname === "/auth" ||
+      pathname.startsWith("/auth/") ||
+      pathname === "/api" ||
+      pathname.startsWith("/api/");
+
+    if (
+      isAuthOrApi &&
+      !SAFE_METHODS.has(request.method) &&
+      !isSameOriginRequest(request, url)
+    ) {
+      console.warn("[CSRF] Запрос отклонён:", {
+        method: request.method,
         pathname,
-      );
+        origin: request.headers.get("Origin") || null,
+      });
 
-      if (authResponse) {
-        return authResponse;
+      return jsonAuthResponse({ error: "Forbidden" }, 403);
+    }
+
+    // 1. Маршруты авторизации.
+    const authResponse = await handleAuthRoute(
+      request,
+      env,
+      pathname,
+    );
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    // 2. Установка приложения Bitrix24.
+    if (pathname === "/install") {
+      return handleInstallRequest(request);
+    }
+
+    // 3. Получение списка коллабов.
+    if (
+      pathname === "/activities/rest/pull_chats_options/handler.js"
+    ) {
+      return handlePullChatsOptions(request);
+    }
+
+    // 4. Создание почтового ящика через существующую активность.
+    if (
+      pathname === "/activities/rest/create_mailbox/handler.js"
+    ) {
+      console.log("[ROUTER] Маршрут создания почты:", {
+        pathname,
+        method: request.method,
+        timestamp: new Date().toISOString(),
+      });
+
+      return handleCreateMailbox(request, env, ctx);
+    }
+
+    // 5. API интерфейса — сначала обязательная проверка сессии.
+    if (pathname === "/api" || pathname.startsWith("/api/")) {
+      const session = await getAuthenticatedSession(request, env);
+
+      if (!session) {
+        return jsonAuthResponse(
+          { error: "Требуется авторизация" },
+          401,
+        );
       }
 
-      // 2. Установка приложения Bitrix24.
-      if (pathname === "/install") {
-        return handleInstallRequest(request);
-      }
-
-      // 3. Получение списка коллабов.
+      // 5.1. Удаление пользователя Яндекс 360.
+      // Этот маршрут находится ВНУТРИ проверки авторизации.
       if (
-        pathname === "/activities/rest/pull_chats_options/handler.js"
+        pathname.startsWith("/api/yandex/users/") &&
+        request.method === "DELETE"
       ) {
-        return handlePullChatsOptions(request);
-      }
+        const userId = pathname.slice(
+          "/api/yandex/users/".length,
+        );
 
-      // 4. Создание почтового ящика через существующую активность.
-      if (
-        pathname === "/activities/rest/create_mailbox/handler.js"
-      ) {
-        console.log("[ROUTER] Маршрут создания почты:", {
-          pathname,
-          method: request.method,
-          timestamp: new Date().toISOString(),
-        });
-
-        return handleCreateMailbox(request, env, ctx);
-      }
-
-      // 5. API интерфейса — сначала обязательная проверка сессии.
-      if (pathname === "/api" || pathname.startsWith("/api/")) {
-        const session = await getAuthenticatedSession(request, env);
-
-        if (!session) {
+        // Принимаем только числовой ID.
+        if (!/^\d+$/.test(userId)) {
           return jsonAuthResponse(
-            { error: "Требуется авторизация" },
-            401,
+            { error: "Некорректный ID пользователя" },
+            400,
           );
         }
 
-        // 5.1. Удаление пользователя Яндекс 360.
-        // Этот маршрут находится ВНУТРИ проверки авторизации.
-        if (
-          pathname.startsWith("/api/yandex/users/") &&
-          request.method === "DELETE"
-        ) {
-          const userId = pathname.slice(
-            "/api/yandex/users/".length,
+        if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
+          return jsonAuthResponse(
+            { error: "Не настроены параметры Яндекс 360" },
+            500,
           );
-
-          // Принимаем только числовой ID.
-          if (!/^\d+$/.test(userId)) {
-            return jsonAuthResponse(
-              { error: "Некорректный ID пользователя" },
-              400,
-            );
-          }
-
-          if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
-            return jsonAuthResponse(
-              { error: "Не настроены параметры Яндекс 360" },
-              500,
-            );
-          }
-
-          try {
-            const yandexUrl =
-              `https://api360.yandex.net/directory/v1/org/` +
-              `${encodeURIComponent(env.YANDEX_ORG_ID)}/users/` +
-              `${encodeURIComponent(userId)}`;
-
-            const response = await fetch(yandexUrl, {
-              method: "DELETE",
-              headers: {
-                Authorization: `OAuth ${env.YANDEX_TOKEN}`,
-                Accept: "application/json",
-              },
-              signal: AbortSignal.timeout(20000),
-            });
-
-            if (!response.ok) {
-              const data = await response.json().catch(() => null);
-
-              console.error("[API YANDEX DELETE] Ошибка:", {
-                status: response.status,
-                userId,
-                code: data?.code || data?.error || "UNKNOWN",
-              });
-
-              return jsonAuthResponse(
-                {
-                  error: "Не удалось удалить пользователя Яндекс 360",
-                },
-                502,
-              );
-            }
-
-            console.log("[API YANDEX DELETE] Пользователь удалён:", {
-              userId,
-              username: session.username,
-            });
-
-            return jsonAuthResponse({
-              success: true,
-              userId,
-            });
-          } catch (error) {
-            console.error("[API YANDEX DELETE] Ошибка запроса:", {
-              userId,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown error",
-            });
-
-            return jsonAuthResponse(
-              { error: "Ошибка соединения с Яндекс 360" },
-              502,
-            );
-          }
         }
 
-        // 5.2. Получение пользователей Яндекс 360.
-        if (
-          pathname === "/api/yandex/users" &&
-          request.method === "GET"
-        ) {
-          try {
-            const result = await getMailboxesnameYandex(env);
+        try {
+          const yandexUrl =
+            `https://api360.yandex.net/directory/v1/org/` +
+            `${encodeURIComponent(env.YANDEX_ORG_ID)}/users/` +
+            `${encodeURIComponent(userId)}`;
 
-            return jsonAuthResponse({
-              users: result.users,
-              total: result.total,
-            });
-          } catch (error) {
-            console.error("[API YANDEX USERS] Ошибка:", {
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown error",
+          const response = await fetch(yandexUrl, {
+            method: "DELETE",
+            headers: {
+              Authorization: `OAuth ${env.YANDEX_TOKEN}`,
+              Accept: "application/json",
+            },
+            signal: AbortSignal.timeout(20000),
+          });
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => null);
+
+            console.error("[API YANDEX DELETE] Ошибка:", {
+              status: response.status,
+              userId,
+              code: data?.code || data?.error || "UNKNOWN",
             });
 
             return jsonAuthResponse(
               {
-                error:
-                  "Не удалось получить список пользователей Яндекс 360",
+                error: "Не удалось удалить пользователя Яндекс 360",
               },
               502,
             );
           }
-        }
 
-        // Неизвестные API-маршруты.
-        return jsonAuthResponse(
-          { error: "API endpoint not found" },
-          404,
-        );
+          console.log("[API YANDEX DELETE] Пользователь удалён:", {
+            userId,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({
+            success: true,
+            userId,
+          });
+        } catch (error) {
+          console.error("[API YANDEX DELETE] Ошибка запроса:", {
+            userId,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            { error: "Ошибка соединения с Яндекс 360" },
+            502,
+          );
+        }
       }
 
-      // 6. Остальные запросы — Vue SPA и статические файлы.
-      return env.ASSETS.fetch(request);
-    } catch (error) {
-      console.error("[ROUTER] Необработанная ошибка:", {
-        pathname,
-        message:
-          error instanceof Error
-            ? error.message
-            : String(error),
-        timestamp: new Date().toISOString(),
-      });
+      // 5.2. Получение пользователей Яндекс 360.
+      if (
+        pathname === "/api/yandex/users" &&
+        request.method === "GET"
+      ) {
+        try {
+          const result = await getMailboxesnameYandex(env);
 
-      return new Response("Internal Server Error", {
-        status: 500,
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-store",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
+          return jsonAuthResponse({
+            users: result.users.map(toPublicYandexUser),
+            total: result.total,
+          });
+        } catch (error) {
+          console.error("[API YANDEX USERS] Ошибка:", {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                "Не удалось получить список пользователей Яндекс 360",
+            },
+            502,
+          );
+        }
+      }
+
+      // Неизвестные API-маршруты.
+      return jsonAuthResponse(
+        { error: "API endpoint not found" },
+        404,
+      );
     }
+
+    // 6. Остальные запросы — Vue SPA и статические файлы.
+    return env.ASSETS.fetch(request);
+  } catch (error) {
+    console.error("[ROUTER] Необработанная ошибка:", {
+      pathname,
+      message:
+        error instanceof Error
+          ? error.message
+          : String(error),
+      timestamp: new Date().toISOString(),
+    });
+
+    return new Response("Internal Server Error", {
+      status: 500,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const response = await handleRequest(request, env, ctx);
+
+    return withSecurityHeaders(response, env);
   },
 };

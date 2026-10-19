@@ -87,10 +87,19 @@ const definitions = getActivityDefinitions(origin);
     throw new Error("Некорректный ответ bizproc.activity.list");
   }
 
-  const existingCodes = new Set(existing);
+  // Извлекаем коды активностей из массива объектов
+  const existingCodes = new Set(
+    existing.map(item => typeof item === 'string' ? item : item?.CODE).filter(Boolean)
+  );
+
+  console.log("[ACTIVITY] Существующие активности:", Array.from(existingCodes));
 
   for (const definition of definitions) {
-    console.log("[ACTIVITY] Регистрация:", definition.CODE);
+    console.log("[ACTIVITY] Регистрация:", {
+      CODE: definition.CODE,
+      HANDLER: definition.HANDLER,
+      exists: existingCodes.has(definition.CODE),
+    });
 
     const fields = {
       ...definition,
