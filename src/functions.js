@@ -235,7 +235,6 @@ export async function getMailboxes(env, domainname) {
       body: new URLSearchParams({
         authinfo: `${env.USER_REG}:${env.PASSWD_REG}`,
         func: "email",
-        domainname: domainname,
         out: "json",
         lang: "ru"
       }),
@@ -261,6 +260,27 @@ export async function getMailboxes(env, domainname) {
 
     throw new Error("ISPmanager не вернул список почтовых ящиков");
   }
+
+  // Приводим elem к массиву: при единственном элементе ISPmanager
+  // может вернуть объект, а при пустом списке — вообще не вернуть поле.
+  const rawElem = data?.doc?.elem;
+  let elements = Array.isArray(rawElem)
+    ? rawElem
+    : rawElem
+      ? [rawElem]
+      : [];
+
+  // Параметр domainname в func=email не фильтрует список, поэтому
+  // запрос отправляем так же, как в Postman, а домен фильтруем здесь.
+  if (domainname) {
+    const suffix = `@${domainname}`.toLowerCase();
+
+    elements = elements.filter((item) =>
+      String(item?.name?.$ || "").toLowerCase().endsWith(suffix)
+    );
+  }
+
+  data.doc.elem = elements;
 
   return data;
 }

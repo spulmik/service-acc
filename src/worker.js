@@ -3,6 +3,7 @@ import {
   getMailboxesnameYandex,
   createYandexUser,
   deleteYandexUser,
+  getMailboxes,
 } from "./functions.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
@@ -286,6 +287,64 @@ async function handleRequest(request, env, ctx) {
             {
               error:
                 "Не удалось получить список пользователей Яндекс 360",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.4. Получение почтовых ящиков Reg.ru (ISPmanager).
+      if (
+        pathname === "/api/reg/mailboxes" &&
+        request.method === "GET"
+      ) {
+        try {
+          const url = new URL(request.url);
+          const domain = url.searchParams.get("domain") || "energy-team.club";
+
+          const result = await getMailboxes(env, domain);
+
+          console.log("[API REG MAILBOXES] Получено:", {
+            domain,
+            count: result?.doc?.elem?.length || 0,
+            username: session.username,
+          });
+
+          // ISPmanager возвращает данные в формате:
+          // { doc: { elem: [{ name: { $: "username@domain" } }, ...] } }
+          const mailboxes = Array.isArray(result?.doc?.elem)
+            ? result.doc.elem.map((item) => {
+                // Полный email из ISPmanager
+                const fullEmail = item?.name?.$ || "";
+                // Логин до @
+                const username = fullEmail.split("@")[0];
+
+                return {
+                  username,
+                  email: fullEmail,
+                };
+              })
+            : [];
+
+          return jsonAuthResponse({
+            mailboxes,
+            domain,
+            total: mailboxes.length,
+          });
+        } catch (error) {
+          console.error("[API REG MAILBOXES] Ошибка:", {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось получить список почтовых ящиков",
             },
             502,
           );

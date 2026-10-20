@@ -15,6 +15,11 @@ const router = createRouter({
       component: HomeView
     },
     {
+      path: "/reg",
+      name: "reg",
+      component: () => import("../components/Reg/Reg.vue")
+    },
+    {
       path: "/:pathMatch(.*)*",
       redirect: "/"
     }
