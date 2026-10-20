@@ -309,6 +309,89 @@ export function getNextUuid(result, access, projectId) {
 // ==========================================
 // Удаление пользователя из Яндекс 360
 // ==========================================
+/**
+ * Создание пользователя в Яндекс 360
+ * @param {object} env - Environment variables
+ * @param {object} userData - Данные нового пользователя
+ * @param {string} userData.nickname - Никнейм (логин без домена)
+ * @param {string} userData.password - Пароль
+ * @param {object} userData.name - ФИО
+ * @param {string} userData.name.first - Имя
+ * @param {string} userData.name.last - Фамилия
+ * @param {string} [userData.name.middle] - Отчество
+ * @param {string} [userData.departmentId] - ID отдела
+ * @param {string} [userData.position] - Должность
+ * @returns {Promise<object>} Созданный пользователь
+ */
+export async function createYandexUser(env, userData) {
+  if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
+    throw new Error("Не настроены параметры Яндекс 360");
+  }
+
+  // Валидация обязательных полей
+  if (!userData.nickname || !/^[a-z0-9._-]{3,30}$/.test(userData.nickname)) {
+    throw new Error(
+      "Никнейм должен содержать 3-30 символов (латиница, цифры, точка, дефис, подчёркивание)"
+    );
+  }
+
+  if (!userData.password || userData.password.length < 8) {
+    throw new Error("Пароль должен содержать минимум 8 символов");
+  }
+
+  if (!userData.name?.first || !userData.name?.last) {
+    throw new Error("Укажите имя и фамилию");
+  }
+
+  const yandexUrl =
+    `https://api360.yandex.net/directory/v1/org/` +
+    `${encodeURIComponent(env.YANDEX_ORG_ID)}/users`;
+
+  const requestBody = {
+    nickname: userData.nickname,
+    password: userData.password,
+    name: {
+      first: userData.name.first,
+      last: userData.name.last,
+      ...(userData.name.middle && { middle: userData.name.middle }),
+    },
+    ...(userData.departmentId && { departmentId: Number(userData.departmentId) }),
+    ...(userData.position && { position: userData.position }),
+  };
+
+  const response = await fetch(yandexUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `OAuth ${env.YANDEX_TOKEN}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+
+    // Обработка типичных ошибок
+    if (response.status === 409 || data?.code === "conflict") {
+      throw new Error(`Пользователь с никнеймом «${userData.nickname}» уже существует`);
+    }
+
+    throw new Error(
+      `Не удалось создать пользователя: HTTP ${response.status}, ` +
+      `код: ${data?.code || data?.error || "UNKNOWN"}`
+    );
+  }
+
+  const result = await response.json();
+
+  return {
+    success: true,
+    user: result,
+  };
+}
+
 export async function deleteYandexUser(env, userId) {
   if (!env.YANDEX_TOKEN || !env.YANDEX_ORG_ID) {
     throw new Error("Не настроены параметры Яндекс 360");

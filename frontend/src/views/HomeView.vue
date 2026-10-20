@@ -31,7 +31,7 @@
 import { ref } from 'vue'
 
 import YandexWindow from '@/components/Yandex/YandexWindow.vue'
-import RegWindow from '@/components/RegWindow.vue'
+import RegWindow from '@/components/REG/RegWindow.vue'
 import CloudContactWindow from '@/components/CloudContactWindow.vue'
 import OpenVpnWindow from '@/components/OpenVpnWindow.vue'
 

@@ -91,6 +91,12 @@
 
     <div class="table-footer">
     </div>
+
+    <!-- Диалог добавления пользователя -->
+    <YandexAdd
+      v-model="showAddDialog"
+      @created="handleUserCreated"
+    />
   </section>
 </template>
 
@@ -100,11 +106,13 @@ import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/Yandex/users.js'
 import YandexDelete from './YandexDelete.vue'
+import YandexAdd from './YandexAdd.vue'
 
 const search = ref('')
 const tableData = ref([])
 const loading = ref(false)
 const error = ref('')
+const showAddDialog = ref(false)
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -155,6 +163,15 @@ async function loadUsers() {
 function handleEdit(row) {
   console.log('Редактирование пользователя:', row)
   ElMessage.info('Редактирование пока не реализовано')
+}
+
+function addYandexUser() {
+  showAddDialog.value = true
+}
+
+function handleUserCreated(newUser) {
+  // Обновить список пользователей
+  loadUsers()
 }
 
 onMounted(loadUsers)

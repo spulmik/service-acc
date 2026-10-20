@@ -1,6 +1,7 @@
 import { handleInstallRequest } from "../install.js";
 import {
   getMailboxesnameYandex,
+  createYandexUser,
   deleteYandexUser,
 } from "./functions.js";
 
@@ -225,7 +226,43 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
-      // 5.2. Получение пользователей Яндекс 360.
+      // 5.2. Создание пользователя Яндекс 360.
+      if (
+        pathname === "/api/yandex/users" &&
+        request.method === "POST"
+      ) {
+        try {
+          const body = await request.json();
+
+          const result = await createYandexUser(env, body);
+
+          console.log("[API YANDEX CREATE] Пользователь создан:", {
+            nickname: body.nickname,
+            username: session.username,
+          });
+
+          return jsonAuthResponse(result);
+        } catch (error) {
+          console.error("[API YANDEX CREATE] Ошибка:", {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось создать пользователя Яндекс 360",
+            },
+            400,
+          );
+        }
+      }
+
+      // 5.3. Получение пользователей Яндекс 360.
       if (
         pathname === "/api/yandex/users" &&
         request.method === "GET"
