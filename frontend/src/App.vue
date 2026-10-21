@@ -255,6 +255,7 @@ onMounted(checkSession);
 .auth-heading h1 {
   margin: 0 0 10px;
   font-size: 24px;
+  color: black;
 }
 
 .auth-heading p {

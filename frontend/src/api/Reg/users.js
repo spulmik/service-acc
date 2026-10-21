@@ -21,3 +21,45 @@ export async function getMailboxes(domain = "energy-team.club") {
 
   return data;
 }
+export async function createUser(userData) {
+  const response = await fetch("/api/reg/mailboxes",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(userData),
+    });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || `Ошибка создания пользователя: HTTP ${response.status}`
+      );
+    }
+  return data
+}
+
+export async function deleteUser(userId) {
+  const response = await fetch(
+    `/api/reg/mailboxes/${encodeURIComponent(userId)}`,
+    {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+      },
+    }
+  )
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка удаления пользователя: HTTP ${response.status}`
+    )
+  }
+  
+  return data
+}

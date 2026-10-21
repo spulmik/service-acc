@@ -286,6 +286,70 @@ export async function getMailboxes(env, domainname) {
 }
 
 // ==========================================
+// Создание почты по Reg.ru (ISPmanager)
+// ==========================================
+export async function createRegUser(env, { nickname, password, domain = "energy-team.club" }) {
+  if (!env.USER_REG || !env.PASSWD_REG) {
+    throw new Error("Не настроены учётные данные ISPmanager");
+  }
+
+  const name = String(nickname || "").trim().toLowerCase();
+
+  if (!/^[a-z0-9._-]{3,30}$/.test(name)) {
+    throw new Error("Некорректный никнейм: 3-30 символов, латиница/цифры/._-");
+  }
+
+  if (!password || String(password).length < 8) {
+    throw new Error("Пароль должен быть не короче 8 символов");
+  }
+
+  // Запрос как в примере curl: func=email.edit + sok=ok создают ящик.
+  const response = await fetch("https://server101.hosting.reg.ru:1500/ispmgr", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      authinfo: `${env.USER_REG}:${env.PASSWD_REG}`,
+      func: "email.edit",
+      sok: "ok",
+      name,
+      domainname: domain,
+      passwd: password,
+      confirm: password,
+      maxsize: "100",
+      out: "json",
+      lang: "ru",
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`ISPmanager HTTP ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!data) {
+    throw new Error("ISPmanager вернул некорректный ответ");
+  }
+
+  // ISPmanager отдаёт ошибки с HTTP 200 в doc.error.
+  if (data?.doc?.error) {
+    const message = data.doc.error?.msg?.$ || "Не удалось создать почтовый ящик";
+
+    console.error("[ISPmanager] Ошибка создания ящика:", message);
+
+    throw new Error(message);
+  }
+
+  return {
+    username: name,
+    email: `${name}@${domain}`,
+  };
+}
+
+// ==========================================
 // UUID по Рег.ру
 // ==========================================
 export function getNextUuid(result, access, projectId) {
@@ -449,6 +513,12 @@ export async function deleteYandexUser(env, userId) {
     success: true,
     userId,
   };
+}
+
+export async function deleteRegUser(env, email) {
+    if (!env.USER_REG || !env.PASSWD_REG) {
+    throw new Error("Не настроены параметры ISPmanager");
+  }
 }
 
 // Cloud Contact

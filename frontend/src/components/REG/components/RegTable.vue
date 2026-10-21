@@ -18,6 +18,12 @@
 
       <el-button
         :loading="loading"
+        @click="addUserReg"
+        icon=""><el-icon><Plus /></el-icon>
+      </el-button>
+
+      <el-button
+        :loading="loading"
         @click="loadMailboxes"
       >
         Обновить список
@@ -53,6 +59,24 @@
         min-width="180"
         show-overflow-tooltip
       />
+      <el-table-column
+        label="Действия"
+        width="250"
+        align="right"
+        fixed="right"
+        >
+        <template #default="{ row }">
+            <el-button
+            size="small"
+            @click="handleEdit(row)"
+            >Изменить
+            </el-button>
+            <RegDelete
+            :user="row"
+            @deleted="loadMailboxes"
+            />
+        </template>
+        </el-table-column>
     </el-table>
 
     <div class="table-footer">
@@ -69,19 +93,28 @@
         background
       />
     </div>
+
+    <!-- Диалог добавления почты -->
+    <RegAdd
+      v-model="showAddDialog"
+      @created="loadMailboxes"
+    />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Plus } from '@element-plus/icons-vue'
 import { getMailboxes } from '@/api/Reg/users.js'
+import RegDelete from './RegDelete.vue'
+import RegAdd from './RegAdd.vue'
 
 const search = ref('')
 const tableData = ref([])
 const loading = ref(false)
 const error = ref('')
+const showAddDialog = ref(false)
 const selectedDomain = ref('energy-team.club')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -111,6 +144,15 @@ const pagedTableData = computed(() => {
 watch([search, pageSize], () => {
   currentPage.value = 1
 })
+
+function handleEdit(row) {
+  console.log('Редактирование пользователя:', row)
+  ElMessage.info('Редактирование пока не реализовано')
+}
+
+function addUserReg() {
+  showAddDialog.value = true
+}
 
 async function loadMailboxes() {
   loading.value = true

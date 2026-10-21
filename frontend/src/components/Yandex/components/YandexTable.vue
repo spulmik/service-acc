@@ -40,7 +40,7 @@
 
     <el-table
       v-loading="loading"
-      :data="filterTableData"
+      :data="pagedTableData"
       stripe
       style="width: 100%"
       empty-text="Пользователи не найдены"
@@ -68,7 +68,7 @@
 
     <el-table-column
     label="Действия"
-    width="220"
+    width="250"
     align="right"
     fixed="right"
     >
@@ -90,6 +90,17 @@
     </el-table>
 
     <div class="table-footer">
+      <span class="footer-info">
+        Домен: @energy-team.ru 
+      </span>
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :total="filterTableData.length"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        background
+      />
     </div>
 
     <!-- Диалог добавления пользователя -->
@@ -101,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/Yandex/users.js'
@@ -113,6 +124,8 @@ const tableData = ref([])
 const loading = ref(false)
 const error = ref('')
 const showAddDialog = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -127,6 +140,19 @@ const filterTableData = computed(() => {
         String(value || '').toLowerCase().includes(query)
       )
   )
+})
+
+// Срез под текущую страницу — таблице отдаём только видимые строки.
+const pagedTableData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+
+  return filterTableData.value.slice(start, start + pageSize.value)
+})
+
+// При новом поиске или смене размера страницы возвращаемся на первую,
+// чтобы не оказаться на несуществующей странице.
+watch([search, pageSize], () => {
+  currentPage.value = 1
 })
 
 async function loadUsers() {
@@ -148,6 +174,7 @@ async function loadUsers() {
       ].filter(Boolean).join(' '),
       nickname: user.nickname || '',
     }))
+    currentPage.value = 1
   } catch (err) {
     error.value =
       err instanceof Error
@@ -186,15 +213,23 @@ onMounted(loadUsers)
 .table-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex: 1;
 }
 
 .table-toolbar h3 {
-  margin: 0 0 6px;
-  font-size: 17px;
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
+  color: #303133;
 }
 
 .users-count {

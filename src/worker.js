@@ -4,6 +4,7 @@ import {
   createYandexUser,
   deleteYandexUser,
   getMailboxes,
+  createRegUser,
 } from "./functions.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
@@ -347,6 +348,46 @@ async function handleRequest(request, env, ctx) {
                   : "Не удалось получить список почтовых ящиков",
             },
             502,
+          );
+        }
+      }
+
+      // 5.5. Создание почтового ящика Reg.ru (ISPmanager).
+      if (
+        pathname === "/api/reg/mailboxes" &&
+        request.method === "POST"
+      ) {
+        try {
+          const body = await request.json();
+
+          const result = await createRegUser(env, {
+            nickname: body.nickname,
+            password: body.password,
+            domain: body.domain || "energy-team.club",
+          });
+
+          console.log("[API REG CREATE] Ящик создан:", {
+            email: result.email,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ user: result });
+        } catch (error) {
+          console.error("[API REG CREATE] Ошибка:", {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось создать почтовый ящик",
+            },
+            400,
           );
         }
       }
