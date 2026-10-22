@@ -5,6 +5,7 @@ import {
   deleteYandexUser,
   getMailboxes,
   createRegUser,
+  deleteRegUser,
 } from "./functions.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
@@ -386,6 +387,45 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось создать почтовый ящик",
+            },
+            400,
+          );
+        }
+      }
+
+      // 5.6. Удаление почтового ящика Reg.ru (ISPmanager).
+      if (
+        pathname.startsWith("/api/reg/mailboxes/") &&
+        request.method === "DELETE"
+      ) {
+        const email = decodeURIComponent(
+          pathname.slice("/api/reg/mailboxes/".length),
+        );
+
+        try {
+          const result = await deleteRegUser(env, email);
+
+          console.log("[API REG DELETE] Ящик удалён:", {
+            email: result.email,
+            username: session.username,
+          });
+
+          return jsonAuthResponse(result);
+        } catch (error) {
+          console.error("[API REG DELETE] Ошибка:", {
+            email,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось удалить почтовый ящик",
             },
             400,
           );

@@ -350,6 +350,58 @@ export async function createRegUser(env, { nickname, password, domain = "energy-
 }
 
 // ==========================================
+// Удаление почты по Reg.ru (ISPmanager)
+// ==========================================
+export async function deleteRegUser(env, email) {
+  if (!env.USER_REG || !env.PASSWD_REG) {
+    throw new Error("Не настроены учётные данные ISPmanager");
+  }
+
+  const elid = String(email || "").trim().toLowerCase();
+
+  if (!/^[a-z0-9._-]+@[a-z0-9.-]+$/.test(elid)) {
+    throw new Error("Некорректный адрес почтового ящика");
+  }
+
+  // func=email.delete + elid=<полный email> удаляет ящик.
+  const response = await fetch("https://server101.hosting.reg.ru:1500/ispmgr", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      authinfo: `${env.USER_REG}:${env.PASSWD_REG}`,
+      func: "email.delete",
+      elid,
+      sok: "ok",
+      out: "json",
+      lang: "ru",
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`ISPmanager HTTP ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!data) {
+    throw new Error("ISPmanager вернул некорректный ответ");
+  }
+
+  if (data?.doc?.error) {
+    const message = data.doc.error?.msg?.$ || "Не удалось удалить почтовый ящик";
+
+    console.error("[ISPmanager] Ошибка удаления ящика:", message);
+
+    throw new Error(message);
+  }
+
+  return { email: elid };
+}
+
+// ==========================================
 // UUID по Рег.ру
 // ==========================================
 export function getNextUuid(result, access, projectId) {
@@ -513,12 +565,6 @@ export async function deleteYandexUser(env, userId) {
     success: true,
     userId,
   };
-}
-
-export async function deleteRegUser(env, email) {
-    if (!env.USER_REG || !env.PASSWD_REG) {
-    throw new Error("Не настроены параметры ISPmanager");
-  }
 }
 
 // Cloud Contact

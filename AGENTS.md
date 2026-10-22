@@ -1,42 +1,39 @@
-# Cloudflare Workers
+# service-acc (Timeweb / Node.js)
 
-STOP. Your knowledge of Cloudflare Workers APIs and limits may be outdated. Always retrieve current documentation before any Workers, KV, R2, D1, Durable Objects, Queues, Vectorize, AI, or Agents SDK task.
+Этот проект перенесён с Cloudflare Workers на обычный Node.js-сервер для
+хостинга Timeweb. **Wrangler и Cloudflare больше не используются.**
 
-## Docs
+## Архитектура
 
-- https://developers.cloudflare.com/workers/
-- MCP: `https://docs.mcp.cloudflare.com/mcp`
+- `server.js` — Node HTTP-адаптер. Строит Web `Request`, вызывает
+  `worker.fetch(request, env, ctx)` и отдаёт `Response`. Сама логика
+  осталась от Workers и не переписывалась.
+- `src/worker.js` — роутинг (как было). Экспортирует `default { fetch }`.
+- `src/auth.js`, `src/functions.js`, `src/activities/**`, `src/webhooks/**`,
+  `install.js`, `CloudContact.js` — без изменений относительно Cloudflare.
+- `server/kv-redis.js` — замена Cloudflare KV на Redis. В `env` подставляется
+  как `BITRIX_APP_CONFIG`; интерфейс `get/put/delete` (+ `expirationTtl`).
+- `server/assets.js` — раздача `frontend/dist` (замена `env.ASSETS`), SPA-fallback.
+- `frontend/` — Vue 3 + Vite (не менялся). Сборка: `npm run build`.
 
-For all limits and quotas, retrieve from the product's `/platform/limits/` page. eg. `/workers/platform/limits`
+## Команды
 
-## Commands
+| Команда | Назначение |
+|---------|------------|
+| `npm install` | зависимости сервера |
+| `npm run build` | сборка фронтенда в `frontend/dist` |
+| `npm start` | запуск сервера (`node server.js`) |
+| `pm2 start ecosystem.config.cjs` | запуск под pm2 |
 
-| Command | Purpose |
-|---------|---------|
-| `npx wrangler dev` | Local development |
-| `npx wrangler deploy` | Deploy to Cloudflare |
-| `npx wrangler types` | Generate TypeScript types |
-| `npx wrangler secret put __`| put secret in your project
+## Конфигурация
 
-Run `wrangler types` after changing bindings in wrangler.jsonc.
+- Секреты — через `.env` (читается `dotenv`) или окружение. См. `.env.example`.
+- Redis — через `REDIS_URL`.
+- Деплой, nginx, TLS и установка секретов — см. `README.timeweb.md`.
 
-## Node.js Compatibility
+## Требования рантайма
 
-https://developers.cloudflare.com/workers/runtime-apis/nodejs/
-
-## Errors
-
-- **Error 1102** (CPU/Memory exceeded): Retrieve limits from `/workers/platform/limits/`
-- **All errors**: https://developers.cloudflare.com/workers/observability/errors/
-
-## Product Docs
-
-Retrieve API references and limits from:
-`/kv/` · `/r2/` · `/d1/` · `/durable-objects/` · `/queues/` · `/vectorize/` · `/workers-ai/` · `/agents/`
-
-## Best Practices (conditional)
-
-If the application uses Durable Objects or Workflows, refer to the relevant best practices:
-
-- Durable Objects: https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/
-- Workflows: https://developers.cloudflare.com/workflows/build/rules-of-workflows/
+- Node.js 18+ (глобальные `fetch`/`Request`/`Response`/`Headers`/`crypto.subtle`).
+- Redis.
+- nginx c TLS и пробросом `X-Forwarded-Proto` / `Host` (иначе ломаются
+  CSRF-проверка `Origin === url.origin` и cookie `Secure; SameSite=None`).

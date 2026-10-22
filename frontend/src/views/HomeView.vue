@@ -5,6 +5,13 @@
       <template #header>
         <div class="card-header">
           <strong>Реестр управления УЗ</strong>
+          <el-button
+          v-model="showGlAddDialog"
+          @click="GlobalAddUser"
+          icon=""
+          ><el-icon><Plus /></el-icon>
+
+          </el-button>
         </div>
       </template>
 
@@ -29,13 +36,22 @@
 
 <script setup>
 import { ref } from 'vue'
-
+import { ElMessage } from 'element-plus'
+import { Search, Plus } from '@element-plus/icons-vue'
 import YandexWindow from '@/components/Yandex/YandexWindow.vue'
 import RegWindow from '@/components/REG/RegWindow.vue'
 import CloudContactWindow from '@/components/CloudContactWindow.vue'
 import OpenVpnWindow from '@/components/OpenVpnWindow.vue'
 
 const activeName = ref('Yandex')
+const showGlAddDialog = ref(false)
+const error = ref('')
+
+function GlobalAddUser() {
+  // ElMessage.info('Добавление пока не реализовано')
+  showGlAddDialog.value = true
+}
+
 </script>
 
 <style scoped>
@@ -54,6 +70,7 @@ const activeName = ref('Yandex')
 
 .card-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
 }

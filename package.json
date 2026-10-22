@@ -2,17 +2,19 @@
   "name": "service-acc",
   "version": "0.0.0",
   "private": true,
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev"
+  "type": "module",
+  "engines": {
+    "node": ">=18"
   },
-  "devDependencies": {
-    "wrangler": "^4.126.0"
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build:frontend": "npm --prefix frontend install && npm --prefix frontend run build",
+    "build": "npm run build:frontend"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
     "bcryptjs": "^3.0.3",
-    "element-plus": "^2.14.7"
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.1"
   }
 }

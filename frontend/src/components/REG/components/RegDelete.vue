@@ -3,7 +3,7 @@
         <el-button
             type="danger"
             size="small"
-            @click="dialogsVisible = true"
+            @click="dialogVisible = true"
         >
         Удалить</el-button>
 
@@ -12,7 +12,6 @@
             title="Подтверждение удаления"
             width="420px"
             :close-on-click-modal="false"
-            :close-on-click-escape="false"
             :close-on-press-escape="!loading"
             :show-close="!loading"
         >
@@ -77,27 +76,27 @@ const userName = computed(() => {
 async function confirmDelete() {
     if (!props.user.email) {
         ElMessage.error('Не удалось определить email пользователя')
+        return
     }
-    return
-}
 
-loading.value = true
+    loading.value = true
 
-try {
-    await deleteUser(props.user.email)
+    try {
+        await deleteUser(props.user.email)
 
-    dialogVisible.value = false
-    ElMessage.success(`Пользователь "${userName.value}" удален`)
+        dialogVisible.value = false
+        ElMessage.success(`Пользователь "${userName.value}" удален`)
 
-    emit('deleted', props.user.email)
-} catch (error) {
-    ElMessage.error(
-        error instanceof Error
-        ? error.message
-        : 'Не удалось удалить пользователя'
-    )
-} finally {
-    loading.value = false
+        emit('deleted', props.user.email)
+    } catch (error) {
+        ElMessage.error(
+            error instanceof Error
+            ? error.message
+            : 'Не удалось удалить пользователя'
+        )
+    } finally {
+        loading.value = false
+    }
 }
 </script>
 

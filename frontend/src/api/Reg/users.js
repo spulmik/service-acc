@@ -42,24 +42,25 @@ export async function createUser(userData) {
   return data
 }
 
-export async function deleteUser(userId) {
+export async function deleteUser(email) {
   const response = await fetch(
-    `/api/reg/mailboxes/${encodeURIComponent(userId)}`,
+    `/api/reg/mailboxes/${encodeURIComponent(email)}`,
     {
-      method: 'POST',
-      credentials: 'same-origin',
+      method: "DELETE",
+      credentials: "same-origin",
       headers: {
-        Accept: 'application/json',
+        Accept: "application/json",
       },
     }
-  )
-  const data = await response.json().catch(() => null)
+  );
+
+  const data = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(
-      data?.error || `Ошибка удаления пользователя: HTTP ${response.status}`
-    )
+      data?.error || `Ошибка удаления ящика: HTTP ${response.status}`
+    );
   }
-  
-  return data
+
+  return data;
 }
