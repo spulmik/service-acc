@@ -56,9 +56,20 @@ const env = {
 // В Workers ctx управляет фоновыми задачами; здесь они не нужны.
 const ctx = { waitUntil() {}, passThroughOnException() {} };
 
-// Внешний origin берём из заголовков от nginx, иначе CSRF-проверка
-// (Origin === url.origin) и Secure-cookie сломаются за реверс-прокси.
+// Публичный адрес приложения. За туннелем (serveo, ngrok и т.п.) заголовки
+// могут приходить неверными — тогда задайте PUBLIC_ORIGIN, и сервер будет
+// считать протокол/хост именно из неё (чтобы CSRF-проверка и Secure-cookie
+// работали). Например: PUBLIC_ORIGIN=https://energyb24.serveo.net
+const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN
+  ? process.env.PUBLIC_ORIGIN.replace(/\/+$/, "")
+  : "";
+
+// Внешний origin: приоритет у PUBLIC_ORIGIN, иначе — из заголовков прокси.
 function buildBase(req) {
+  if (PUBLIC_ORIGIN) {
+    return PUBLIC_ORIGIN;
+  }
+
   const proto = String(req.headers["x-forwarded-proto"] || "http")
     .split(",")[0]
     .trim();

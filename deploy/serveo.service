@@ -1,0 +1,26 @@
+# systemd-юнит: держит serveo-туннель постоянно и перезапускает при обрыве.
+#
+# Установка (в VM):
+#   sudo cp deploy/serveo.service /etc/systemd/system/serveo.service
+#   отредактируйте User= и при необходимости поддомен (energyb24) ниже
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now serveo
+#   sudo systemctl status serveo --no-pager
+#   journalctl -u serveo -f   # посмотреть выданный URL
+#
+# Поддомен запрашивается префиксом перед :80 — "energyb24:80:localhost:3000"
+# даёт https://energyb24.serveo.net (точный адрес serveo печатает в логе).
+
+[Unit]
+Description=serveo tunnel for service-acc
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=spulmik
+ExecStart=/usr/bin/ssh -N -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -R energyb24:80:localhost:3000 serveo.net
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
