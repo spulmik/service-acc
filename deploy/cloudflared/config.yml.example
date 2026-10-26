@@ -1,0 +1,13 @@
+# Пример ~/.cloudflared/config.yml (замените значения).
+# TUNNEL_ID и файл креденшелов создаются командой `cloudflared tunnel create`.
+
+tunnel: <TUNNEL_ID>
+credentials-file: /home/<USER>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # Входящий HTTPS от Cloudflare -> ваше Node-приложение на localhost:3000.
+  # Cloudflared сам проставляет X-Forwarded-Proto: https и Host,
+  # поэтому Secure/SameSite=None-cookie и CSRF-проверка работают.
+  - hostname: app.ВАШ-ДОМЕН
+    service: http://localhost:3000
+  - service: http_status:404
