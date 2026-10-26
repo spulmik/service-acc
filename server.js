@@ -9,28 +9,47 @@ import "dotenv/config"; // подхватывает .env в process.env (дол�
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import Redis from "ioredis";
 
 import worker from "./src/worker.js";
 import { createKvRedis } from "./server/kv-redis.js";
+import { createKvFile } from "./server/kv-file.js";
 import { createAssets } from "./server/assets.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT) || 3000;
 const ASSETS_DIR = process.env.ASSETS_DIR || join(__dirname, "frontend", "dist");
-const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, ".data");
 
-// --- Redis (замена Cloudflare KV) ---
-const redis = new Redis(REDIS_URL, { maxRetriesPerRequest: 5 });
-redis.on("error", (err) => console.error("[redis]", err.message));
-redis.on("connect", () => console.log("[redis] connected"));
+// --- Хранилище вместо Cloudflare KV ---
+// Если задан REDIS_URL — используем Redis (подходит для VPS).
+// Иначе — файловое хранилище: работает на любом хостинге с Node, без Redis.
+let appConfigKv;
+let installsKv;
+
+if (process.env.REDIS_URL) {
+  const { default: Redis } = await import("ioredis");
+  const redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 5 });
+
+  redis.on("error", (err) => console.error("[redis]", err.message));
+  redis.on("connect", () => console.log("[redis] connected"));
+
+  appConfigKv = createKvRedis(redis, "bitrix_app_config:");
+  installsKv = createKvRedis(redis, "bitrix_installs:");
+
+  console.log("[kv] Redis");
+} else {
+  appConfigKv = createKvFile(join(DATA_DIR, "bitrix_app_config.json"));
+  installsKv = createKvFile(join(DATA_DIR, "bitrix_installs.json"));
+
+  console.log(`[kv] файловое хранилище (${DATA_DIR})`);
+}
 
 // --- env: секреты из окружения + шимы вместо биндингов Cloudflare ---
 const env = {
   ...process.env,
-  BITRIX_APP_CONFIG: createKvRedis(redis, "bitrix_app_config:"),
-  BITRIX_INSTALLS: createKvRedis(redis, "bitrix_installs:"),
+  BITRIX_APP_CONFIG: appConfigKv,
+  BITRIX_INSTALLS: installsKv,
   ASSETS: createAssets(ASSETS_DIR),
 };
 

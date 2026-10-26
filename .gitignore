@@ -166,5 +166,6 @@ dist
 # timeweb / node build output
 
 frontend/dist/
+.data/
 logs/
 *.log
