@@ -19,7 +19,7 @@
         <el-tab-pane label="Яндекс" name="Yandex" />
         <el-tab-pane label="Рег" name="Reg" />
         <el-tab-pane label="CloudContact" name="CloudContact" />
-        <el-tab-pane label="ВПН" name="OpenVpn" />
+        <el-tab-pane label="ВПН" name="Vpn" />
       </el-tabs>
 
       <div class="tab-content">
@@ -28,7 +28,7 @@
         <CloudContactWindow
           v-else-if="activeName === 'CloudContact'"
         />
-        <OpenVpnWindow v-else-if="activeName === 'OpenVpn'" />
+        <VpnWindow v-else-if="activeName === 'Vpn'" />
       </div>
     </el-card>
   </main>
@@ -40,8 +40,8 @@ import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
 import YandexWindow from '@/components/Yandex/YandexWindow.vue'
 import RegWindow from '@/components/REG/RegWindow.vue'
-import CloudContactWindow from '@/components/CloudContactWindow.vue'
-import OpenVpnWindow from '@/components/OpenVpnWindow.vue'
+import CloudContactWindow from '@/components/CloudContact/CloudContactWindow.vue'
+import VpnWindow from '@/components/Vpn/OpenVpnWindow.vue'
 
 const activeName = ref('Yandex')
 const showGlAddDialog = ref(false)
