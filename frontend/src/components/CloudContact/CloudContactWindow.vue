@@ -14,11 +14,9 @@
       </el-tabs>
 
       <div class="tab-content">
-        <YandexWindow v-if="activeName === 'CloudContact'" />
-        <RegWindow v-else-if="activeName === 'CloudContactMsp'" />
-        <div v-else-if="activeName === 'CloudContactBack'">
-          CloudContactBack — в разработке
-        </div>
+        <CloudContactWindow v-if="activeName === 'CloudContact'" />
+        <CloudContactWindowMsp v-else-if="activeName === 'CloudContactMsp'" />
+        <CloudContactWindowBack v-else-if="activeName === 'CloudContactBack'" />
       </div>
     </el-card>
 </template>
@@ -27,6 +25,12 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
+
+import CloudContactWindow from '@/components/CloudContact/Osn/CloudContact.vue'
+import CloudContactWindowMsp from '@/components/CloudContact/Msp/CloudContactMsp.vue'
+import CloudContactWindowBack from '@/components/CloudContact/Back/CloudContactBack.vue'
+
+
 import YandexWindow from '@/components/Yandex/YandexWindow.vue'
 import RegWindow from '@/components/REG/RegWindow.vue'
 
