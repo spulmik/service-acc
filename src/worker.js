@@ -8,6 +8,8 @@ import {
   deleteRegUser,
 } from "./functions.js";
 
+import { getCloudContactUsers } from "./cloudcontact.js";
+
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
 import {
   handlePullChatsOptions,
@@ -428,6 +430,44 @@ async function handleRequest(request, env, ctx) {
                   : "Не удалось удалить почтовый ящик",
             },
             400,
+          );
+        }
+      }
+
+      // 5.7. CloudContact (BrightPattern) — список пользователей по типу.
+      if (
+        pathname.startsWith("/api/cloudcontact/") &&
+        request.method === "GET"
+      ) {
+        const type = pathname
+          .slice("/api/cloudcontact/".length)
+          .split("/")[0];
+
+        try {
+          const users = await getCloudContactUsers(env, type);
+
+          console.log("[API CLOUDCONTACT] Получено:", {
+            type,
+            count: users.length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ users, total: users.length, type });
+        } catch (error) {
+          console.error("[API CLOUDCONTACT] Ошибка:", {
+            type,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось получить данные CloudContact",
+            },
+            502,
           );
         }
       }
