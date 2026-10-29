@@ -22,6 +22,16 @@ const TENANTS = {
   },
 };
 
+// Сколько деталей тянуть одновременно (/user/:username). Больше — быстрее,
+// но не перегружаем BrightPattern. 8 — разумный компромисс.
+const DETAIL_CONCURRENCY = 8;
+// Кэш готового списка пользователей (секунды). Повторный заход — мгновенный.
+const USERS_CACHE_TTL = 300;
+// Запас, на сколько раньше срока считать токен «протухшим».
+const TOKEN_EXPIRY_BUFFER = 60;
+// Если сервер не вернул expires_in — считаем токен живым столько секунд.
+const TOKEN_TTL_FALLBACK = 3000;
+
 function getTenant(type) {
   const tenant = TENANTS[type];
 
@@ -32,9 +42,26 @@ function getTenant(type) {
   return tenant;
 }
 
+// KV для кэша (тот же binding, что и для остального приложения). Может
+// отсутствовать — тогда просто работаем без кэша.
+function getStore(env) {
+  return env.BITRIX_APP_CONFIG || null;
+}
+
 // 1. Токен OAuth2 (client_credentials). URL/секрет зависят от вкладки.
-export async function getCloudContactToken(env, type) {
+//    Кэшируем в KV до истечения срока, чтобы не ходить за ним каждый раз.
+export async function getCloudContactToken(env, type, forceRefresh = false) {
   const tenant = getTenant(type);
+  const store = getStore(env);
+  const cacheKey = `cc:token:${type}`;
+
+  if (store && !forceRefresh) {
+    const cached = await store.get(cacheKey).catch(() => null);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const clientId = env.CLOUD_CONTACT_CLIENT_ID;
   const clientSecret = env[tenant.secretEnv];
 
@@ -69,6 +96,17 @@ export async function getCloudContactToken(env, type) {
     throw new Error("Не удалось получить токен CloudContact");
   }
 
+  if (store) {
+    const ttl = Math.max(
+      TOKEN_EXPIRY_BUFFER,
+      Number(data.expires_in || TOKEN_TTL_FALLBACK) - TOKEN_EXPIRY_BUFFER,
+    );
+
+    await store
+      .put(cacheKey, data.access_token, { expirationTtl: ttl })
+      .catch(() => {});
+  }
+
   return data.access_token;
 }
 
@@ -85,47 +123,104 @@ async function ccGet(host, path, token) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(`CloudContact HTTP ${response.status} (${path})`);
+    const error = new Error(`CloudContact HTTP ${response.status} (${path})`);
+    error.status = response.status;
+    throw error;
   }
 
   return data;
 }
 
-// 2. Список пользователей: /phone/user даёт краткую информацию,
-//    затем по каждому /user/:username берём полную.
-export async function getCloudContactUsers(env, type) {
-  const tenant = getTenant(type);
-  const token = await getCloudContactToken(env, type);
+// Выполняет fn для каждого элемента, но не более `limit` одновременно.
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let index = 0;
 
-  const list = await ccGet(tenant.host, "/phone/user", token);
-  const items = Array.isArray(list)
-    ? list
-    : list?.items || list?.users || [];
-
-  const users = [];
-
-  for (const item of items) {
-    // В кратком списке имя может называться по-разному — пробуем варианты.
-    const username =
-      item?.username || item?.loginId || item?.name || item?.user;
-
-    if (!username) {
-      continue;
-    }
-
-    try {
-      const full = await ccGet(
-        tenant.host,
-        `/user/${encodeURIComponent(username)}`,
-        token,
-      );
-
-      users.push(full);
-    } catch {
-      // Не получили детали — кладём хотя бы краткую запись.
-      users.push(item);
+  async function worker() {
+    while (index < items.length) {
+      const current = index++;
+      results[current] = await fn(items[current], current);
     }
   }
 
-  return users;
+  const size = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: size }, () => worker()));
+
+  return results;
+}
+
+// 2. Список пользователей: /phone/user даёт краткую информацию,
+//    затем по каждому /user/:username берём полную (параллельно).
+//    Результат кэшируем на USERS_CACHE_TTL секунд.
+export async function getCloudContactUsers(env, type) {
+  const tenant = getTenant(type);
+  const store = getStore(env);
+  const cacheKey = `cc:users:${type}`;
+
+  if (store) {
+    const cached = await store.get(cacheKey).catch(() => null);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // битый кэш — просто перезапросим
+      }
+    }
+  }
+
+  let token = await getCloudContactToken(env, type);
+
+  // Краткий список. Если токен успел протухнуть — обновляем и повторяем раз.
+  let list;
+  try {
+    list = await ccGet(tenant.host, "/phone/user", token);
+  } catch (error) {
+    if (error.status === 401) {
+      token = await getCloudContactToken(env, type, true);
+      list = await ccGet(tenant.host, "/phone/user", token);
+    } else {
+      throw error;
+    }
+  }
+
+  const items = Array.isArray(list) ? list : list?.items || list?.users || [];
+
+  // Имена пользователей из краткого списка.
+  const names = items
+    .map((item) => item?.username || item?.loginId || item?.name || item?.user)
+    .filter(Boolean);
+
+  // Детали — параллельно, с ограничением одновременных запросов.
+  const users = await mapWithConcurrency(
+    names,
+    DETAIL_CONCURRENCY,
+    async (username) => {
+      try {
+        return await ccGet(
+          tenant.host,
+          `/user/${encodeURIComponent(username)}`,
+          token,
+        );
+      } catch {
+        // Не получили детали — вернём хотя бы краткую запись.
+        return items.find(
+          (item) =>
+            (item?.username || item?.loginId || item?.name || item?.user) ===
+            username,
+        );
+      }
+    },
+  );
+
+  const result = users.filter(Boolean);
+
+  if (store) {
+    await store
+      .put(cacheKey, JSON.stringify(result), {
+        expirationTtl: USERS_CACHE_TTL,
+      })
+      .catch(() => {});
+  }
+
+  return result;
 }
