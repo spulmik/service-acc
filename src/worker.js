@@ -443,8 +443,14 @@ async function handleRequest(request, env, ctx) {
           .slice("/api/cloudcontact/".length)
           .split("/")[0];
 
+        // ?refresh=1 — кнопка «Обновить список»: игнорируем кэш и тянем
+        // свежие данные из BrightPattern (защита от рассинхронизации).
+        const forceRefresh =
+          url.searchParams.get("refresh") === "1" ||
+          url.searchParams.get("refresh") === "true";
+
         try {
-          const users = await getCloudContactUsers(env, type);
+          const users = await getCloudContactUsers(env, type, forceRefresh);
 
           console.log("[API CLOUDCONTACT] Получено:", {
             type,

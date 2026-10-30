@@ -19,8 +19,11 @@ function baseUrl(type) {
   return url;
 }
 
-export async function getUsers(type) {
-  const response = await fetch(baseUrl(type), {
+export async function getUsers(type, { refresh = false } = {}) {
+  // refresh=true — просим бэкенд сбросить кэш и взять свежие данные.
+  const url = refresh ? `${baseUrl(type)}?refresh=1` : baseUrl(type);
+
+  const response = await fetch(url, {
     method: "GET",
     credentials: "same-origin",
     headers: { Accept: "application/json" },

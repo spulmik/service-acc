@@ -24,9 +24,9 @@ const TENANTS = {
 
 // Сколько деталей тянуть одновременно (/user/:username). Больше — быстрее,
 // но не перегружаем BrightPattern. 8 — разумный компромисс.
-const DETAIL_CONCURRENCY = 8;
+const DETAIL_CONCURRENCY = 16;
 // Кэш готового списка пользователей (секунды). Повторный заход — мгновенный.
-const USERS_CACHE_TTL = 300;
+const USERS_CACHE_TTL = 500;
 // Запас, на сколько раньше срока считать токен «протухшим».
 const TOKEN_EXPIRY_BUFFER = 60;
 // Если сервер не вернул expires_in — считаем токен живым столько секунд.
@@ -152,12 +152,12 @@ async function mapWithConcurrency(items, limit, fn) {
 // 2. Список пользователей: /phone/user даёт краткую информацию,
 //    затем по каждому /user/:username берём полную (параллельно).
 //    Результат кэшируем на USERS_CACHE_TTL секунд.
-export async function getCloudContactUsers(env, type) {
+export async function getCloudContactUsers(env, type, forceRefresh = false) {
   const tenant = getTenant(type);
   const store = getStore(env);
   const cacheKey = `cc:users:${type}`;
 
-  if (store) {
+  if (store && !forceRefresh) {
     const cached = await store.get(cacheKey).catch(() => null);
     if (cached) {
       try {

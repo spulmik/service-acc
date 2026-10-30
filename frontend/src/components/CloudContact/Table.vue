@@ -14,7 +14,7 @@
         class="search-input"
       />
 
-      <el-button :loading="loading" @click="load">Обновить список</el-button>
+      <el-button :loading="loading" @click="load(true)">Обновить список</el-button>
     </div>
 
     <el-alert
@@ -104,12 +104,14 @@ watch([search, pageSize], () => {
   currentPage.value = 1
 })
 
-async function load() {
+// force=true (кнопка «Обновить список») — сбрасываем кэш на бэкенде.
+// Автозагрузка при монтировании/смене вкладки идёт из кэша (быстро).
+async function load(force = false) {
   loading.value = true
   error.value = ''
 
   try {
-    const result = await getUsers(props.type)
+    const result = await getUsers(props.type, { refresh: force === true })
 
     // Поддержим массив и типовые обёртки {users|items|mailboxes}.
     tableData.value = Array.isArray(result)
