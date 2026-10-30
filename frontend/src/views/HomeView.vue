@@ -44,6 +44,7 @@ import YandexWindow from '@/components/Yandex/YandexWindow.vue'
 import RegWindow from '@/components/REG/RegWindow.vue'
 import CloudContactWindow from '@/components/CloudContact/CloudContactWindow.vue'
 import VpnWindow from '@/components/Vpn/OpenVpnWindow.vue'
+import AllUsr from "@/components/Globalusers/AllUsrs.vue";
 
 const activeName = ref('AllUsr')
 const showGlAddDialog = ref(false)
