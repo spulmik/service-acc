@@ -10,6 +10,8 @@ import {
 
 import { getCloudContactUsers } from "./cloudcontact.js";
 
+import { listMembersDecrypted } from "../server/members.js";
+
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
 import {
   handlePullChatsOptions,
@@ -22,6 +24,17 @@ import {
 } from "./auth.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Кто видит вкладку «Все пользователи» и расшифрованные пароли.
+// Список логинов в .env: MEMBERS_ALLOWED_USERS=admin,ivanov
+function isMembersAllowed(env, username) {
+  const allowed = String(env.MEMBERS_ALLOWED_USERS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  return allowed.includes(String(username || "").toLowerCase());
+}
 
 function normalizeHost(value) {
   const host = String(value || "")
@@ -474,6 +487,46 @@ async function handleRequest(request, env, ctx) {
                   : "Не удалось получить данные CloudContact",
             },
             502,
+          );
+        }
+      }
+
+      // 5.8. Текущий пользователь — для фронта (показывать ли вкладку).
+      if (pathname === "/api/me" && request.method === "GET") {
+        return jsonAuthResponse({
+          username: session.username,
+          canSeeMembers: isMembersAllowed(env, session.username),
+        });
+      }
+
+      // 5.9. Реестр участников (с расшифрованными паролями).
+      // Доступ только у логинов из MEMBERS_ALLOWED_USERS.
+      if (pathname === "/api/members" && request.method === "GET") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse(
+            { error: "Нет доступа к реестру участников" },
+            403,
+          );
+        }
+
+        try {
+          const members = await listMembersDecrypted();
+
+          console.log("[API MEMBERS] Выдан список:", {
+            count: members.length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ members, total: members.length });
+        } catch (error) {
+          console.error("[API MEMBERS] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            { error: "Не удалось получить реестр участников" },
+            500,
           );
         }
       }

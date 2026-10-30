@@ -13,8 +13,12 @@ CREATE TABLE IF NOT EXISTS members (
   cloudcontact       TEXT,                   -- CloudContact
   cloudcontact_msp   TEXT,                   -- CloudContactMSP
   cloudcontact_back  TEXT,                   -- CloudContactBack
+  password_enc       TEXT,                   -- пароль (AES-256-GCM, шифртекст)
   created_at         TIMESTAMPTZ DEFAULT now(),
   updated_at         TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS members_email_idx ON members (email);
+
+-- Если таблица уже создана без password_enc — добавить столбец:
+ALTER TABLE members ADD COLUMN IF NOT EXISTS password_enc TEXT;

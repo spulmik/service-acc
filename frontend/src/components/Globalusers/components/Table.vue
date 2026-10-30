@@ -1,49 +1,62 @@
 <template>
-    <section class="gl-table">
-        <div class="table-toolbar">
-            <div>
-                <h3>{{ title }}</h3>
-                <span class="users-count">Всего: {{ filterTableData.lenght }}</span>
-            </div>
+  <section class="gl-table">
+    <div class="table-toolbar">
+      <div>
+        <h3>{{ title }}</h3>
+        <span class="users-count">Всего: {{ filterTableData.length }}</span>
+      </div>
 
-            <el-input
-            v-model="search"
-            clearable
-            placeholder="Поиск"
-            :prefix-icon="Search"
-            />
+      <el-input
+        v-model="search"
+        clearable
+        placeholder="Поиск"
+        :prefix-icon="Search"
+        class="search-input"
+      />
 
-           <el-button
-           :loading="loading"
-           @click="load(true)"
-           >Обновить список</el-button> 
-        </div>
-        
-        <el-alert
-        v-if="error"
-        :title="error"
-        type="error"
-        show-icon
-        :closable="false"
-        class="table-alert"
-        />
+      <el-switch
+        v-model="showPasswords"
+        active-text="Показать пароли"
+        inline-prompt
+      />
 
-        <el-table
-        v-loading="loading"
-        :data="pageTableData"
-        stripe
-        style="width: 100%;"
-        empty-text="Нет данных"
-        >
-        
-        <el-table-column
+      <el-button :loading="loading" @click="load">Обновить список</el-button>
+    </div>
+
+    <el-alert
+      v-if="error"
+      :title="error"
+      type="error"
+      show-icon
+      :closable="false"
+      class="table-alert"
+    />
+
+    <el-table
+      v-loading="loading"
+      :data="pagedTableData"
+      stripe
+      style="width: 100%"
+      empty-text="Нет данных"
+    >
+      <el-table-column
         v-for="col in columns"
-        :key="col"
-        :prop="col"
-        :label="col"
-        min-width="160"
+        :key="col.prop"
+        :prop="col.prop"
+        :label="col.label"
+        min-width="150"
         show-overflow-tooltip
       />
+
+      <el-table-column label="Пароль" min-width="160">
+        <template #default="{ row }">
+          <span v-if="!row.password" class="muted">—</span>
+          <span v-else-if="showPasswords" class="password-cell">{{
+            row.password
+          }}</span>
+          <span v-else class="muted">••••••••</span>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="table-footer">
@@ -58,10 +71,29 @@
     </div>
   </section>
 </template>
-<script>
+
+<script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
+import { getMembers } from '@/api/Globalusers/users.js'
+
+defineProps({
+  title: { type: String, default: 'Управление пользователями' },
+})
+
+// Открытые столбцы (пароль выводится отдельной колонкой с маскировкой).
+const columns = [
+  { prop: 'fio', label: 'ФИО' },
+  { prop: 'username', label: 'Логин' },
+  { prop: 'email', label: 'Email' },
+  { prop: 'yandex', label: 'Яндекс' },
+  { prop: 'reg', label: 'Рег' },
+  { prop: 'vpn', label: 'ВПН' },
+  { prop: 'cloudcontact', label: 'CloudContact' },
+  { prop: 'cloudcontact_msp', label: 'CloudContact MSP' },
+  { prop: 'cloudcontact_back', label: 'CloudContact Back' },
+]
 
 const search = ref('')
 const tableData = ref([])
@@ -69,11 +101,62 @@ const loading = ref(false)
 const error = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
+const showPasswords = ref(false)
+
+const filterTableData = computed(() => {
+  const query = search.value.trim().toLowerCase()
+
+  if (!query) {
+    return tableData.value
+  }
+
+  // В поиск пароль не включаем намеренно.
+  return tableData.value.filter((item) =>
+    columns.some((col) =>
+      String(item[col.prop] ?? '')
+        .toLowerCase()
+        .includes(query),
+    ),
+  )
+})
+
+const pagedTableData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+
+  return filterTableData.value.slice(start, start + pageSize.value)
+})
+
+watch([search, pageSize], () => {
+  currentPage.value = 1
+})
+
+async function load() {
+  loading.value = true
+  error.value = ''
+
+  try {
+    const result = await getMembers()
+
+    tableData.value = Array.isArray(result)
+      ? result
+      : result?.members || []
+
+    currentPage.value = 1
+  } catch (err) {
+    error.value =
+      err instanceof Error ? err.message : 'Не удалось загрузить участников'
+
+    ElMessage.error(error.value)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 </script>
 
-
 <style scoped>
-.contact-table {
+.gl-table {
   padding: 20px;
 }
 
@@ -98,7 +181,15 @@ const pageSize = ref(20)
 }
 
 .search-input {
-  width: 280px;
+  width: 260px;
+}
+
+.password-cell {
+  font-family: monospace;
+}
+
+.muted {
+  color: var(--el-text-color-secondary);
 }
 
 .table-alert {

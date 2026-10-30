@@ -4,6 +4,8 @@
 // Поддерживает разделители , и ; (как в русском Excel), кавычки и BOM.
 // Заголовки сопоставляются с колонками таблицы (регистр и пробелы не важны).
 
+import "dotenv/config"; // подхватить DATABASE_URL и ENCRYPTION_KEY из .env
+
 import { readFile } from "node:fs/promises";
 import { upsertMember } from "../server/members.js";
 import { getPool } from "../server/db.js";
@@ -23,6 +25,8 @@ const HEADER_MAP = {
   "cloudcontact": "cloudcontact",
   "cloudcontactmsp": "cloudcontact_msp",
   "cloudcontactback": "cloudcontact_back",
+  "пароль": "password",
+  "password": "password",
 };
 
 function detectDelimiter(line) {
