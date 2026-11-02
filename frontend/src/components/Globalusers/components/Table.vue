@@ -82,18 +82,34 @@ defineProps({
   title: { type: String, default: 'Управление пользователями' },
 })
 
-// Открытые столбцы (пароль выводится отдельной колонкой с маскировкой).
-const columns = [
-  { prop: 'fio', label: 'ФИО' },
-  { prop: 'username', label: 'Логин' },
-  { prop: 'email', label: 'Email' },
-  { prop: 'yandex', label: 'Яндекс' },
-  { prop: 'reg', label: 'Рег' },
-  { prop: 'vpn', label: 'ВПН' },
-  { prop: 'cloudcontact', label: 'CloudContact' },
-  { prop: 'cloudcontact_msp', label: 'CloudContact MSP' },
-  { prop: 'cloudcontact_back', label: 'CloudContact Back' },
-]
+// Красивые подписи для известных полей. Незнакомые покажем как есть.
+const LABELS = {
+  fio: 'ФИО',
+  username: 'Логин',
+  email: 'Email',
+  yandex: 'Яндекс',
+  reg: 'Рег',
+  vpn: 'ВПН',
+  cloudcontact: 'CloudContact',
+  cloudcontact_msp: 'CloudContact MSP',
+  cloudcontact_back: 'CloudContact Back',
+}
+
+// Служебные поля и пароль (пароль — отдельной колонкой с маскировкой).
+const HIDDEN = new Set(['id', 'created_at', 'updated_at', 'password'])
+
+// Столбцы строим динамически по ключам из БД (первая строка ответа).
+const columns = computed(() => {
+  const first = tableData.value[0]
+
+  if (!first) {
+    return []
+  }
+
+  return Object.keys(first)
+    .filter((key) => !HIDDEN.has(key))
+    .map((key) => ({ prop: key, label: LABELS[key] || key }))
+})
 
 const search = ref('')
 const tableData = ref([])
@@ -112,7 +128,7 @@ const filterTableData = computed(() => {
 
   // В поиск пароль не включаем намеренно.
   return tableData.value.filter((item) =>
-    columns.some((col) =>
+    columns.value.some((col) =>
       String(item[col.prop] ?? '')
         .toLowerCase()
         .includes(query),
