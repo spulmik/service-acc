@@ -15,6 +15,8 @@ import { getCloudContactUsers } from "./cloudcontact.js";
 
 import { getVpnUsers } from "./vpn.js";
 
+import { generatePassword } from "./functions.js";
+
 import { listMembersDecrypted } from "../server/members.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
@@ -563,6 +565,13 @@ async function handleRequest(request, env, ctx) {
             502,
           );
         }
+      }
+
+      // 5.11. Генерация пароля по политике.
+      // Единый источник правила — generatePassword() в src/functions.js,
+      // чтобы фронтовые кнопки «сгенерировать» не расходились с бэком.
+      if (pathname === "/api/password" && request.method === "GET") {
+        return jsonAuthResponse({ password: generatePassword(16) });
       }
 
       // Неизвестные API-маршруты.

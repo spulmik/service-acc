@@ -5,12 +5,8 @@
       <template #header>
         <div class="card-header">
           <strong>Реестр управления УЗ</strong>
-          <el-button
-          v-model="showGlAddDialog"
-          @click="GlobalAddUser"
-          icon=""
-          ><el-icon><Plus /></el-icon>
-
+          <el-button @click="GlobalAddUser">
+            <el-icon><Plus /></el-icon>
           </el-button>
         </div>
       </template>
@@ -37,6 +33,9 @@
         <VpnWindow v-else-if="activeName === 'Vpn'" />
       </div>
     </el-card>
+    <addGlobalAddUser
+    v-model="showAddDialog"
+    />
   </main>
 </template>
 
@@ -50,13 +49,14 @@ import CloudContactWindow from '@/components/CloudContact/CloudContactWindow.vue
 import VpnWindow from '@/components/Vpn/OpenVpnWindow.vue'
 import AllUsr from "@/components/Globalusers/AllUsrs.vue";
 import { getMe } from '@/api/Globalusers/users.js'
+import addGlobalAddUser from '../components/Globalusers/components/AddUsers.vue';
 
 // Вкладку «Все Пользователи» (реестр с паролями) видят только логины
 // из MEMBERS_ALLOWED_USERS — решает бэкенд через /api/me.
 const canSeeMembers = ref(false)
 // Пока не знаем права — начинаем с Яндекса; при наличии доступа переключим.
 const activeName = ref('Yandex')
-const showGlAddDialog = ref(false)
+const showAddDialog = ref(false)
 const error = ref('')
 
 onMounted(async () => {
@@ -74,8 +74,7 @@ onMounted(async () => {
 })
 
 function GlobalAddUser() {
-  ElMessage.info('Добавление пока не реализовано')
-  // showGlAddDialog.value = true
+  showAddDialog.value = true
 }
 
 </script>

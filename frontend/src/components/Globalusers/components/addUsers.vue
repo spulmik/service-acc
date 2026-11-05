@@ -55,7 +55,17 @@
           :disabled="loading"
           show-password
           clearable
-        />
+        >
+          <template #suffix>
+            <el-icon
+              class="pwd-wand"
+              title="Сгенерировать пароль"
+              @click="genPassword"
+            >
+              <MagicStick />
+            </el-icon>
+          </template>
+        </el-input>
       </el-form-item>
 
       <!-- Доп. поля нужны только для Яндекс 360. -->
@@ -120,8 +130,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { MagicStick } from '@element-plus/icons-vue'
 import { createUser as createRegUser } from '@/api/Reg/users.js'
 import { createUser as createYandexUser } from '@/api/Yandex/users.js'
+import { generatePassword } from '@/api/password.js'
 
 const props = defineProps({
   modelValue: {
@@ -202,6 +214,16 @@ function resetForm() {
   }
 }
 
+async function genPassword() {
+  try {
+    form.value.password = await generatePassword()
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error ? error.message : 'Не удалось сгенерировать пароль'
+    )
+  }
+}
+
 async function submitForm() {
   if (!formRef.value) return
 
@@ -260,6 +282,15 @@ async function submitForm() {
 </script>
 
 <style scoped>
+.pwd-wand {
+  cursor: pointer;
+  color: var(--el-text-color-secondary);
+}
+
+.pwd-wand:hover {
+  color: var(--el-color-primary);
+}
+
 .form-hint {
   display: block;
   margin-top: 4px;
