@@ -1,11 +1,15 @@
 import {
   generatePassword,
   projectMapping,
+} from "../../../functions.js";
+import {
   getMailboxesnameYandex,
   getNextUuidYandex,
+} from "../../../yandex.js";
+import {
   getMailboxes,
   getNextUuid,
-} from "../../../functions.js";
+} from "../../../reg.js";
 
 const ACTIVITY_CODE = "energy_team_create_mailbox";
 

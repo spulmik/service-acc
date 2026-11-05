@@ -3,12 +3,17 @@ import {
   getMailboxesnameYandex,
   createYandexUser,
   deleteYandexUser,
+} from "./yandex.js";
+
+import {
   getMailboxes,
   createRegUser,
   deleteRegUser,
-} from "./functions.js";
+} from "./reg.js";
 
 import { getCloudContactUsers } from "./cloudcontact.js";
+
+import { getVpnUsers } from "./vpn.js";
 
 import { listMembersDecrypted } from "../server/members.js";
 
@@ -527,6 +532,35 @@ async function handleRequest(request, env, ctx) {
           return jsonAuthResponse(
             { error: "Не удалось получить реестр участников" },
             500,
+          );
+        }
+      }
+
+      // 5.10. VPN (NetBird) — список пользователей.
+      if (pathname === "/api/vpn/users" && request.method === "GET") {
+        try {
+          const users = await getVpnUsers(env);
+
+          console.log("[API VPN USERS] Получено:", {
+            count: users.length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ users, total: users.length });
+        } catch (error) {
+          console.error("[API VPN USERS] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось получить список пользователей VPN",
+            },
+            502,
           );
         }
       }

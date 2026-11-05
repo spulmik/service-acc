@@ -1,10 +1,12 @@
+import { generatePassword } from "../../../functions.js";
 import {
-  generatePassword,
   getMailboxesnameYandex,
   getNextUuidYandex,
+} from "../../../yandex.js";
+import {
   getMailboxes,
   getNextUuid,
-} from "../../../functions.js";
+} from "../../../reg.js";
 
 const ACTIVITY_CODE = "create_employee_account";
 const CACHE_TTL = 7 * 24 * 60 * 60;
