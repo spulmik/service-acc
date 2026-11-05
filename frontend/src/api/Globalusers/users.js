@@ -19,6 +19,29 @@ export async function getMembers() {
   return data;
 }
 
+// Добавить/обновить запись реестра (upsert по username на бэке).
+export async function saveMember(member) {
+  const response = await fetch("/api/members", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(member),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Не удалось сохранить в реестр: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
 // Текущий пользователь: { username, canSeeMembers }.
 export async function getMe() {
   const response = await fetch("/api/me", {

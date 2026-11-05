@@ -17,7 +17,7 @@ import { getVpnUsers } from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
 
-import { listMembersDecrypted } from "../server/members.js";
+import { listMembersDecrypted, upsertMember } from "../server/members.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
 import {
@@ -533,6 +533,66 @@ async function handleRequest(request, env, ctx) {
 
           return jsonAuthResponse(
             { error: "Не удалось получить реестр участников" },
+            500,
+          );
+        }
+      }
+
+      // 5.9b. Добавление/обновление записи реестра (upsert по username).
+      // Доступ только у логинов из MEMBERS_ALLOWED_USERS.
+      if (pathname === "/api/members" && request.method === "POST") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse(
+            { error: "Нет доступа к реестру участников" },
+            403,
+          );
+        }
+
+        try {
+          const body = await request.json();
+
+          if (!body?.fio && !body?.username) {
+            return jsonAuthResponse(
+              { error: "Нужно указать как минимум ФИО или логин" },
+              400,
+            );
+          }
+
+          // Берём только известные поля (не доверяем лишним ключам из тела).
+          const member = await upsertMember({
+            fio: body.fio,
+            username: body.username,
+            email: body.email,
+            yandex: body.yandex,
+            reg: body.reg,
+            vpn: body.vpn,
+            cloudcontact: body.cloudcontact,
+            cloudcontact_msp: body.cloudcontact_msp,
+            cloudcontact_back: body.cloudcontact_back,
+            phone: body.phone,
+            position: body.position,
+            password: body.password,
+          });
+
+          console.log("[API MEMBERS POST] Запись сохранена:", {
+            username: member.username,
+            by: session.username,
+          });
+
+          return jsonAuthResponse({ member });
+        } catch (error) {
+          console.error("[API MEMBERS POST] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось сохранить запись реестра",
+            },
             500,
           );
         }

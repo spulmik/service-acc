@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS members (
   cloudcontact       TEXT,                   -- CloudContact
   cloudcontact_msp   TEXT,                   -- CloudContactMSP
   cloudcontact_back  TEXT,                   -- CloudContactBack
+  phone              TEXT,                   -- Номер телефона
+  position           TEXT,                   -- Должность
   password_enc       TEXT,                   -- пароль (AES-256-GCM, шифртекст)
   created_at         TIMESTAMPTZ DEFAULT now(),
   updated_at         TIMESTAMPTZ DEFAULT now()
@@ -20,5 +22,7 @@ CREATE TABLE IF NOT EXISTS members (
 
 CREATE INDEX IF NOT EXISTS members_email_idx ON members (email);
 
--- Если таблица уже создана без password_enc — добавить столбец:
+-- Если таблица уже создана без части столбцов — добавить недостающие:
 ALTER TABLE members ADD COLUMN IF NOT EXISTS password_enc TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS position TEXT;

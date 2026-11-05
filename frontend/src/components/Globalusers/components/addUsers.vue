@@ -68,9 +68,8 @@
         </el-input>
       </el-form-item>
 
-      <!-- Доп. поля нужны только для Яндекс 360. -->
-      <template v-if="isYandex">
-        <el-form-item label="Имя" prop="firstName">
+      <!-- ФИО/должность: показываем для обоих доменов. -->
+      <el-form-item label="Имя" prop="firstName">
           <el-input
             v-model="form.firstName"
             placeholder="Иван"
@@ -96,6 +95,15 @@
             clearable
           />
         </el-form-item>
+        
+        <el-form-item label="Номер телефона" prop="phone">
+          <el-input
+            v-model="form.phone"
+            placeholder="+7 000 000-00-00"
+            :disabled="loading"
+            clearable
+          />
+        </el-form-item>
 
         <el-form-item label="Должность" prop="position">
           <el-input
@@ -105,7 +113,6 @@
             clearable
           />
         </el-form-item>
-      </template>
     </el-form>
 
     <template #footer>
@@ -134,6 +141,7 @@ import { MagicStick } from '@element-plus/icons-vue'
 import { createUser as createRegUser } from '@/api/Reg/users.js'
 import { createUser as createYandexUser } from '@/api/Yandex/users.js'
 import { generatePassword } from '@/api/password.js'
+import { saveMember } from '@/api/Globalusers/users.js'
 
 const props = defineProps({
   modelValue: {
@@ -156,12 +164,14 @@ const form = ref({
   lastName: '',
   middleName: '',
   position: '',
+  phone: '',
 })
 
 // Яндекс 360 живёт на energy-team.ru, Reg.ru — на energy-team.club.
 const isYandex = computed(() => form.value.domain === 'energy-team.ru')
 
-// Правила реактивные: имя и фамилия обязательны только для Яндекса.
+// Поля ФИО показываем для обоих доменов, но обязательны (required)
+// имя и фамилия только для Яндекса — для Reg.ru они необязательны.
 const rules = computed(() => ({
   domain: [
     { required: true, message: 'Выберите домен', trigger: 'change' },
@@ -201,6 +211,15 @@ watch(visible, (newVal) => {
   emit('update:modelValue', newVal)
 })
 
+// При смене домена правила required меняются — убираем возможную
+// старую ошибку валидации с имени/фамилии (для Reg.ru они необязательны).
+watch(
+  () => form.value.domain,
+  () => {
+    formRef.value?.clearValidate(['firstName', 'lastName'])
+  }
+)
+
 function resetForm() {
   formRef.value?.resetFields()
   form.value = {
@@ -211,6 +230,7 @@ function resetForm() {
     lastName: '',
     middleName: '',
     position: '',
+    phone: '',
   }
 }
 
@@ -265,6 +285,33 @@ async function submitForm() {
       })
     }
 
+    // Сохраняем все поля формы в реестр (members). УЗ уже создана,
+    // поэтому ошибку реестра показываем предупреждением, а не как провал.
+    const fio =
+      [form.value.lastName, form.value.firstName, form.value.middleName]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(' ') || nickname
+
+    try {
+      await saveMember({
+        fio,
+        username: nickname,
+        email,
+        password: form.value.password,
+        phone: form.value.phone.trim(),
+        position: form.value.position.trim(),
+        yandex: isYandex.value ? email : '',
+        reg: isYandex.value ? '' : email,
+      })
+    } catch (saveError) {
+      ElMessage.warning(
+        `Пользователь создан, но не сохранён в реестр: ${
+          saveError instanceof Error ? saveError.message : 'ошибка'
+        }`,
+      )
+    }
+
     ElMessage.success(`Пользователь «${email}» создан`)
 
     visible.value = false
@@ -282,15 +329,6 @@ async function submitForm() {
 </script>
 
 <style scoped>
-.pwd-wand {
-  cursor: pointer;
-  color: var(--el-text-color-secondary);
-}
-
-.pwd-wand:hover {
-  color: var(--el-color-primary);
-}
-
 .form-hint {
   display: block;
   margin-top: 4px;

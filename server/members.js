@@ -18,6 +18,8 @@ const PLAIN_COLUMNS = [
   "cloudcontact",
   "cloudcontact_msp",
   "cloudcontact_back",
+  "phone",
+  "position",
 ];
 
 // Все столбцы для INSERT: открытые + зашифрованный пароль.

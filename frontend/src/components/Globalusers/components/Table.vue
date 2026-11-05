@@ -93,6 +93,8 @@ const LABELS = {
   cloudcontact: 'CloudContact',
   cloudcontact_msp: 'CloudContact MSP',
   cloudcontact_back: 'CloudContact Back',
+  phone: 'Телефон',
+  position: 'Должность',
 }
 
 // Служебные поля и пароль (пароль — отдельной колонкой с маскировкой).
