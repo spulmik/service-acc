@@ -68,6 +68,44 @@
         </el-input>
       </el-form-item>
 
+      <!-- Другие сервисы: в каких ещё системах завести пользователя -->
+      <el-form-item label="Сервисы">
+        <el-checkbox-group v-model="form.services" :disabled="loading">
+          <el-checkbox value="cloudcontact">CloudContact</el-checkbox>
+          <el-checkbox value="vpn">NetBird</el-checkbox>
+        </el-checkbox-group>
+      </el-form-item>
+
+      <!-- Поля появляются при выборе соответствующей галочки. -->
+      <el-form-item v-if="isCloud" label="CloudContact" prop="cloudcontact">
+        <el-input
+          v-model="form.cloudcontact"
+          placeholder="Логин в CloudContact"
+          :disabled="loading"
+          clearable
+        />
+      </el-form-item>
+
+      <el-form-item v-if="isVpn" label="Группы NetBird" prop="vpn">
+        <el-select
+          v-model="form.vpn"
+          multiple
+          filterable
+          collapse-tags
+          :loading="vpnGroupsLoading"
+          :disabled="loading"
+          placeholder="Группы в впн"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="g in vpnGroups"
+            :key="g.id"
+            :label="g.peers_count ? `${g.name} (${g.peers_count})` : g.name"
+            :value="g.name"
+          />
+        </el-select>
+      </el-form-item>
+
       <!-- ФИО/должность: показываем для обоих доменов. -->
       <el-form-item label="Имя" prop="firstName">
           <el-input
@@ -142,6 +180,7 @@ import { createUser as createRegUser } from '@/api/Reg/users.js'
 import { createUser as createYandexUser } from '@/api/Yandex/users.js'
 import { generatePassword } from '@/api/password.js'
 import { saveMember } from '@/api/Globalusers/users.js'
+import { getGroups } from '@/api/Vpn/users.js'
 
 const props = defineProps({
   modelValue: {
@@ -165,10 +204,42 @@ const form = ref({
   middleName: '',
   position: '',
   phone: '',
+  services: [],
+  cloudcontact: '',
+  vpn: [],
 })
 
 // Яндекс 360 живёт на energy-team.ru, Reg.ru — на energy-team.club.
 const isYandex = computed(() => form.value.domain === 'energy-team.ru')
+// services — массив выбранных галочек, поэтому проверяем includes.
+const isCloud = computed(() => form.value.services.includes('cloudcontact'))
+const isVpn = computed(() => form.value.services.includes('vpn'))
+
+// Доступные группы NetBird — грузим один раз, когда впервые отметили VPN.
+const vpnGroups = ref([])
+const vpnGroupsLoading = ref(false)
+
+async function loadVpnGroups() {
+  if (vpnGroups.value.length || vpnGroupsLoading.value) return
+
+  vpnGroupsLoading.value = true
+
+  try {
+    const result = await getGroups()
+
+    vpnGroups.value = Array.isArray(result) ? result : result?.groups || []
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error ? error.message : 'Не удалось загрузить группы NetBird'
+    )
+  } finally {
+    vpnGroupsLoading.value = false
+  }
+}
+
+watch(isVpn, (on) => {
+  if (on) loadVpnGroups()
+})
 
 // Поля ФИО показываем для обоих доменов, но обязательны (required)
 // имя и фамилия только для Яндекса — для Reg.ru они необязательны.
@@ -231,6 +302,9 @@ function resetForm() {
     middleName: '',
     position: '',
     phone: '',
+    services: [],
+    cloudcontact: '',
+    vpn: [],
   }
 }
 
@@ -303,6 +377,8 @@ async function submitForm() {
         position: form.value.position.trim(),
         yandex: isYandex.value ? email : '',
         reg: isYandex.value ? '' : email,
+        cloudcontact: isCloud.value ? form.value.cloudcontact.trim() : '',
+        vpn: isVpn.value ? form.value.vpn.join(', ') : '',
       })
     } catch (saveError) {
       ElMessage.warning(

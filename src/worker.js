@@ -13,7 +13,7 @@ import {
 
 import { getCloudContactUsers } from "./cloudcontact.js";
 
-import { getVpnUsers } from "./vpn.js";
+import { getVpnUsers, getVpnGroups } from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
 
@@ -621,6 +621,35 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось получить список пользователей VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10b. VPN (NetBird) — список групп.
+      if (pathname === "/api/vpn/groups" && request.method === "GET") {
+        try {
+          const groups = await getVpnGroups(env);
+
+          console.log("[API VPN GROUPS] Получено:", {
+            count: groups.length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ groups, total: groups.length });
+        } catch (error) {
+          console.error("[API VPN GROUPS] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось получить список групп VPN",
             },
             502,
           );

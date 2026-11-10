@@ -18,3 +18,21 @@ export async function getUsers() {
 
   return data;
 }
+
+export async function getGroups() {
+  const response = await fetch("/api/vpn/groups", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка получения групп VPN: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}

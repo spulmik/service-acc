@@ -72,3 +72,40 @@ export async function getVpnUsers(env) {
 
   return list.map(toPublicVpnUser);
 }
+
+// Группа NetBird: наружу отдаём id, имя и число пиров.
+function toPublicVpnGroup(group) {
+  return {
+    id: group?.id || "",
+    name: group?.name || "",
+    peers_count: Number(group?.peers_count) || 0,
+  };
+}
+
+export async function getVpnGroups(env) {
+  const token = getToken(env);
+  const url = `${getBase(env)}/api/groups`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird API вернул HTTP ${response.status}${body ? `: ${body.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json().catch(() => null);
+  const list = Array.isArray(data) ? data : data?.groups || [];
+
+  return list.map(toPublicVpnGroup);
+}
