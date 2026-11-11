@@ -172,3 +172,4 @@ logs/
 members-test.xlsx
 members-test.csv
 members.csv
+deploy.sh

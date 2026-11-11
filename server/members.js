@@ -20,6 +20,7 @@ const PLAIN_COLUMNS = [
   "cloudcontact_back",
   "phone",
   "position",
+  "vpngroups",
 ];
 
 // Все столбцы для INSERT: открытые + зашифрованный пароль.

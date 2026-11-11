@@ -180,7 +180,7 @@ import { createUser as createRegUser } from '@/api/Reg/users.js'
 import { createUser as createYandexUser } from '@/api/Yandex/users.js'
 import { generatePassword } from '@/api/password.js'
 import { saveMember } from '@/api/Globalusers/users.js'
-import { getGroups } from '@/api/Vpn/users.js'
+import { getStoredGroups } from '@/api/Vpn/users.js'
 
 const props = defineProps({
   modelValue: {
@@ -225,7 +225,7 @@ async function loadVpnGroups() {
   vpnGroupsLoading.value = true
 
   try {
-    const result = await getGroups()
+    const result = await getStoredGroups()
 
     vpnGroups.value = Array.isArray(result) ? result : result?.groups || []
   } catch (error) {
@@ -378,7 +378,7 @@ async function submitForm() {
         yandex: isYandex.value ? email : '',
         reg: isYandex.value ? '' : email,
         cloudcontact: isCloud.value ? form.value.cloudcontact.trim() : '',
-        vpn: isVpn.value ? form.value.vpn.join(', ') : '',
+        vpngroups: isVpn.value ? form.value.vpn.join(', ') : '',
       })
     } catch (saveError) {
       ElMessage.warning(

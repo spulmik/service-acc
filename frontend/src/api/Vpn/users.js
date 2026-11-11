@@ -36,3 +36,41 @@ export async function getGroups() {
 
   return data;
 }
+
+// Группы из нашей БД (каталог).
+export async function getStoredGroups() {
+  const response = await fetch("/api/vpn/groups/db", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка получения групп из БД: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
+// Записать группы NetBird в нашу БД (синхронизация каталога).
+export async function syncGroups() {
+  const response = await fetch("/api/vpn/groups/sync", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка синхронизации групп: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}

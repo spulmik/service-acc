@@ -19,6 +19,8 @@ import { generatePassword } from "./functions.js";
 
 import { listMembersDecrypted, upsertMember } from "../server/members.js";
 
+import { listVpnGroups, syncVpnGroups } from "../server/groups.js";
+
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
 import {
   handlePullChatsOptions,
@@ -571,6 +573,7 @@ async function handleRequest(request, env, ctx) {
             cloudcontact_back: body.cloudcontact_back,
             phone: body.phone,
             position: body.position,
+            vpngroups: body.vpngroups,
             password: body.password,
           });
 
@@ -650,6 +653,63 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось получить список групп VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10c. Группы VPN из нашей БД (каталог vpn_groups).
+      if (pathname === "/api/vpn/groups/db" && request.method === "GET") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const groups = await listVpnGroups();
+
+          return jsonAuthResponse({ groups, total: groups.length });
+        } catch (error) {
+          console.error("[API VPN GROUPS DB] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            { error: "Не удалось получить группы из БД" },
+            500,
+          );
+        }
+      }
+
+      // 5.10d. Синхронизация групп NetBird → наша БД (каталог vpn_groups).
+      if (pathname === "/api/vpn/groups/sync" && request.method === "POST") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const fromNetbird = await getVpnGroups(env);
+          const groups = await syncVpnGroups(fromNetbird);
+
+          console.log("[API VPN GROUPS SYNC] Записано в БД:", {
+            count: groups.length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ groups, total: groups.length });
+        } catch (error) {
+          console.error("[API VPN GROUPS SYNC] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось синхронизировать группы",
             },
             502,
           );
