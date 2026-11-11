@@ -109,3 +109,54 @@ export async function getVpnGroups(env) {
 
   return list.map(toPublicVpnGroup);
 }
+
+// Добавление пользователя в NetBird. Два режима:
+//   mode "invite" → POST /api/users/invites — ПРИГЛАШЕНИЕ. Пользователь
+//                   создаётся только после принятия инвайта (нужен embedded IdP).
+//   mode "create" → POST /api/users — создаёт пользователя сразу.
+// auto_groups — ID групп (не имена). role обязателен.
+export async function addVpnUser(
+  env,
+  { email, name, role = "user", autoGroups = [], mode = "create", expiresIn } = {},
+) {
+  const token = getToken(env);
+  const isInvite = mode === "invite";
+  const url = `${getBase(env)}/api/users${isInvite ? "/invites" : ""}`;
+
+  const body = {
+    email: String(email || "").trim(),
+    name: String(name || "").trim(),
+    role: role || "user",
+    auto_groups: Array.isArray(autoGroups) ? autoGroups : [],
+  };
+
+  if (isInvite) {
+    if (expiresIn) {
+      body.expires_in = Number(expiresIn);
+    }
+  } else {
+    body.is_service_user = false;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird ${isInvite ? "invite" : "create user"} HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.json().catch(() => null);
+}

@@ -13,7 +13,7 @@ import {
 
 import { getCloudContactUsers } from "./cloudcontact.js";
 
-import { getVpnUsers, getVpnGroups } from "./vpn.js";
+import { getVpnUsers, getVpnGroups, addVpnUser } from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
 
@@ -624,6 +624,45 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось получить список пользователей VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10a. VPN (NetBird) — создать/пригласить пользователя.
+      if (pathname === "/api/vpn/users" && request.method === "POST") {
+        try {
+          const body = await request.json();
+
+          const user = await addVpnUser(env, {
+            email: body.email,
+            name: body.name,
+            role: body.role,
+            autoGroups: body.auto_groups || body.autoGroups,
+            mode: body.mode,
+            expiresIn: body.expires_in,
+          });
+
+          console.log("[API VPN CREATE] Пользователь приглашён:", {
+            email: body.email,
+            groups: (body.auto_groups || []).length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ user });
+        } catch (error) {
+          console.error("[API VPN CREATE] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось создать пользователя VPN",
             },
             502,
           );

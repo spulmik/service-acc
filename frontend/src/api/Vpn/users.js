@@ -37,6 +37,42 @@ export async function getGroups() {
   return data;
 }
 
+// Создать/пригласить пользователя в NetBird. autoGroups — массив ID групп.
+// mode: "invite" (приглашение, /api/users/invites) | "create" (сразу, /api/users)
+export async function addUser({
+  email,
+  name,
+  role = "user",
+  autoGroups = [],
+  mode = "create",
+}) {
+  const response = await fetch("/api/vpn/users", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      name,
+      role,
+      auto_groups: autoGroups,
+      mode,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка создания пользователя VPN: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
 // Группы из нашей БД (каталог).
 export async function getStoredGroups() {
   const response = await fetch("/api/vpn/groups/db", {

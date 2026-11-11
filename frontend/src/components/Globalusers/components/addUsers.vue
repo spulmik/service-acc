@@ -101,10 +101,21 @@
             v-for="g in vpnGroups"
             :key="g.id"
             :label="g.peers_count ? `${g.name} (${g.peers_count})` : g.name"
-            :value="g.name"
+            :value="g.id"
           />
         </el-select>
       </el-form-item>
+      <el-form-item v-if="isVpn" label="Действие NetBird">
+        <el-radio-group v-model="form.vpnMode" :disabled="loading">
+          <el-radio value="invite">Пригласить</el-radio>
+          <el-radio value="create">Создать</el-radio>
+        </el-radio-group>
+        <span class="form-hint">
+          «Пригласить» — отправляет инвайт (пользователь появится после
+          принятия). «Создать» — заводит пользователя в NetBird сразу.
+        </span>
+      </el-form-item>
+        
 
       <!-- ФИО/должность: показываем для обоих доменов. -->
       <el-form-item label="Имя" prop="firstName">
@@ -180,7 +191,7 @@ import { createUser as createRegUser } from '@/api/Reg/users.js'
 import { createUser as createYandexUser } from '@/api/Yandex/users.js'
 import { generatePassword } from '@/api/password.js'
 import { saveMember } from '@/api/Globalusers/users.js'
-import { getStoredGroups } from '@/api/Vpn/users.js'
+import { getStoredGroups, addUser as addVpnUser } from '@/api/Vpn/users.js'
 
 const props = defineProps({
   modelValue: {
@@ -207,6 +218,7 @@ const form = ref({
   services: [],
   cloudcontact: '',
   vpn: [],
+  vpnMode: 'invite',
 })
 
 // Яндекс 360 живёт на energy-team.ru, Reg.ru — на energy-team.club.
@@ -305,6 +317,7 @@ function resetForm() {
     services: [],
     cloudcontact: '',
     vpn: [],
+    vpnMode: 'invite',
   }
 }
 
@@ -367,6 +380,36 @@ async function submitForm() {
         .filter(Boolean)
         .join(' ') || nickname
 
+    // В реестр пишем имена групп (в form.vpn лежат ID — переводим их в имена).
+    const vpnGroupNames = isVpn.value
+      ? form.value.vpn
+          .map((id) => vpnGroups.value.find((g) => g.id === id)?.name || id)
+          .join(', ')
+      : ''
+
+    // NetBird: почта уже создана выше — теперь создаём/приглашаем в NetBird.
+    // Режим выбирается радио: invite (обычный, с письмом) / create (сервисный).
+    // auto_groups — ID групп. Внешняя ошибка не рушит создание УЗ.
+    if (isVpn.value) {
+      const isInvite = form.value.vpnMode === 'invite'
+
+      try {
+        await addVpnUser({
+          email,
+          name: fio,
+          role: 'user',
+          autoGroups: form.value.vpn,
+          mode: form.value.vpnMode,
+        })
+      } catch (vpnError) {
+        ElMessage.warning(
+          `NetBird: ${isInvite ? 'приглашение' : 'создание'} не выполнено — ${
+            vpnError instanceof Error ? vpnError.message : 'ошибка'
+          }`,
+        )
+      }
+    }
+
     try {
       await saveMember({
         fio,
@@ -378,7 +421,7 @@ async function submitForm() {
         yandex: isYandex.value ? email : '',
         reg: isYandex.value ? '' : email,
         cloudcontact: isCloud.value ? form.value.cloudcontact.trim() : '',
-        vpngroups: isVpn.value ? form.value.vpn.join(', ') : '',
+        vpngroups: vpnGroupNames,
       })
     } catch (saveError) {
       ElMessage.warning(
