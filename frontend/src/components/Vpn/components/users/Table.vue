@@ -15,6 +15,10 @@
       />
 
       <el-button :loading="loading" @click="load">Обновить список</el-button>
+
+      <el-button :loading="loading" @click="addUsrVpn">
+        <el-icon><Plus /></el-icon>
+      </el-button>
     </div>
 
     <el-alert
@@ -33,44 +37,61 @@
       style="width: 100%"
       empty-text="Нет данных"
     >
-      <el-table-column prop="name" label="Имя" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="email" label="Email" min-width="220" show-overflow-tooltip />
+      <!-- NAME: аватар + имя + email -->
+      <el-table-column label="Имя" min-width="280">
+        <template #default="{ row }">
+          <div class="user-cell">
+            <div
+              class="avatar"
+              :style="{ background: avatarColor(row.name || row.email) }"
+            >
+              {{ initial(row.name || row.email) }}
+            </div>
+            <div class="user-meta">
+              <div class="user-name">{{ row.name || '—' }}</div>
+              <div class="user-email">{{ row.email }}</div>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
 
       <el-table-column label="Роль" min-width="120">
         <template #default="{ row }">
           <el-tag :type="roleType(row.role)" disable-transitions>
-            {{ row.role || '—' }}
+            <el-icon class="tag-icon"><User /></el-icon>{{ row.role || '—' }}
           </el-tag>
         </template>
       </el-table-column>
 
       <el-table-column label="Статус" min-width="120">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.status)" disable-transitions>
-            {{ row.status || '—' }}
+          <span class="status">
+            <span class="status-dot" :class="statusClass(row.status)"></span>
+            {{ statusLabel(row.status) }}
+          </span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="Группы" min-width="120">
+        <template #default="{ row }">
+          <el-tag type="info" disable-transitions>
+            {{ row.groups }} {{ plural(row.groups, 'группа', 'группы', 'групп') }}
           </el-tag>
         </template>
       </el-table-column>
 
-      <el-table-column prop="groups" label="Групп" width="90" align="center" />
-
-      <el-table-column label="Последний вход" min-width="170">
+      <el-table-column label="Последний вход" min-width="180">
         <template #default="{ row }">
-          <span>{{ formatDate(row.last_login) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="Заблокирован" width="130" align="center">
-        <template #default="{ row }">
-          <el-tag v-if="row.is_blocked" type="danger" disable-transitions>Да</el-tag>
-          <span v-else class="muted">Нет</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="Сервисный" width="110" align="center">
-        <template #default="{ row }">
-          <el-tag v-if="row.is_service_user" type="info" disable-transitions>Да</el-tag>
-          <span v-else class="muted">Нет</span>
+          <el-tooltip
+            v-if="!isEmptyDate(row.last_login)"
+            :content="fullDate(row.last_login)"
+            placement="top"
+          >
+            <span class="last-login">
+              <el-icon><Clock /></el-icon>{{ timeAgo(row.last_login) }}
+            </span>
+          </el-tooltip>
+          <span v-else class="muted">—</span>
         </template>
       </el-table-column>
     </el-table>
@@ -85,21 +106,40 @@
         background
       />
     </div>
+
+    <VpnAdd v-model="showAddDialog" @created="load" />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Plus, User, Clock } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/Vpn/users.js'
+import VpnAdd from './addusr.vue'
+import {
+  initial,
+  avatarColor,
+  roleType,
+  statusClass,
+  statusLabel,
+  plural,
+  timeAgo,
+  fullDate,
+  isEmptyDate,
+} from '@/utils/format.js'
 
 const search = ref('')
 const tableData = ref([])
 const loading = ref(false)
 const error = ref('')
+const showAddDialog = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
+
+function addUsrVpn() {
+  showAddDialog.value = true
+}
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -124,35 +164,6 @@ const pagedTableData = computed(() => {
 watch([search, pageSize], () => {
   currentPage.value = 1
 })
-
-function roleType(role) {
-  if (role === 'owner') return 'danger'
-  if (role === 'admin') return 'warning'
-  return 'info'
-}
-
-function statusType(status) {
-  if (status === 'active') return 'success'
-  if (status === 'invited') return 'warning'
-  if (status === 'blocked') return 'danger'
-  return 'info'
-}
-
-function formatDate(value) {
-  if (!value) return '—'
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) return value
-
-  return date.toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 async function load() {
   loading.value = true
@@ -210,6 +221,86 @@ onMounted(load)
 
 .muted {
   color: var(--el-text-color-secondary);
+}
+
+/* NAME: аватар + имя + email */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-meta {
+  min-width: 0;
+}
+
+.user-name {
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-email {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-icon {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* STATUS: точка + текст */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-text-color-secondary);
+}
+
+.status-dot.is-active {
+  background: var(--el-color-success);
+}
+
+.status-dot.is-invited {
+  background: var(--el-color-warning);
+}
+
+.status-dot.is-blocked {
+  background: var(--el-color-danger);
+}
+
+/* LAST LOGIN */
+.last-login {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--el-text-color-regular);
+  cursor: default;
 }
 
 .table-alert {
