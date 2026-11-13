@@ -22,14 +22,13 @@
 
       <el-button :loading="loading" @click="load">Обновить список</el-button>
 
-      <el-button
-        :loading="syncing"
-        @click="syncVpnGroups"
-        title="Записать группы NetBird в нашу БД (каталог vpn_groups)"
-      >
-        Синхр. группы VPN
-      </el-button>
+      
+
+      <el-button @click="settingsVisible = true">Настройки</el-button>
     </div>
+
+    <SettingsDialog v-model="settingsVisible" />
+
 
     <el-alert
       v-if="error"
@@ -85,7 +84,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { getMembers } from '@/api/Globalusers/users.js'
-import { syncGroups } from '@/api/Vpn/users.js'
+import SettingsDialog from './SettingsDialog.vue'
 
 defineProps({
   title: { type: String, default: 'Управление пользователями' },
@@ -130,25 +129,7 @@ const error = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const showPasswords = ref(false)
-const syncing = ref(false)
-
-// Записать группы NetBird в нашу БД (каталог vpn_groups).
-async function syncVpnGroups() {
-  syncing.value = true
-
-  try {
-    const result = await syncGroups()
-    const count = result?.total ?? result?.groups?.length ?? 0
-
-    ElMessage.success(`Группы VPN синхронизированы: ${count}`)
-  } catch (err) {
-    ElMessage.error(
-      err instanceof Error ? err.message : 'Не удалось синхронизировать группы',
-    )
-  } finally {
-    syncing.value = false
-  }
-}
+const settingsVisible = ref(false)
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
