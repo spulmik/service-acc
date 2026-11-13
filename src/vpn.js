@@ -73,6 +73,53 @@ export async function getVpnUsers(env) {
   return list.map(toPublicVpnUser);
 }
 
+// Приглашение NetBird. invite_token — секрет (по нему можно принять инвайт),
+// наружу его НЕ отдаём.
+function toPublicVpnInvite(inv) {
+  const groups = Array.isArray(inv?.auto_groups) ? inv.auto_groups : [];
+
+  return {
+    id: inv?.id || "",
+    email: inv?.email || "",
+    name: inv?.name || "",
+    role: inv?.role || "",
+    groups: groups.length,
+    created_at: inv?.created_at || "",
+    expires_at: inv?.expires_at || "",
+    expired: Boolean(inv?.expired),
+  };
+}
+
+// Список приглашений (pending invites). Доступно только при включённом
+// embedded IdP в NetBird.
+export async function getVpnInviteUsers(env) {
+  const token = getToken(env);
+  const url = `${getBase(env)}/api/users/invites`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird API вернул HTTP ${response.status}${body ? `: ${body.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json().catch(() => null);
+  const list = Array.isArray(data) ? data : data?.invites || [];
+
+  return list.map(toPublicVpnInvite);
+}
+
 // Группа NetBird: наружу отдаём id, имя и число пиров.
 function toPublicVpnGroup(group) {
   return {

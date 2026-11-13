@@ -19,6 +19,21 @@ export async function getUsers() {
   return data;
 }
 
+export async function getInviteUsers() {
+  const response = await fetch("/api/vpn/inviteusers", {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },  
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if(!response.ok){
+    throw new Error( data?.error || `Ошибка получения пользователей по приглашению: hhtp ${response.status}`);
+  }
+  return data;
+}
+
 export async function getGroups() {
   const response = await fetch("/api/vpn/groups", {
     method: "GET",

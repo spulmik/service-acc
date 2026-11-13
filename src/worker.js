@@ -13,7 +13,12 @@ import {
 
 import { getCloudContactUsers } from "./cloudcontact.js";
 
-import { getVpnUsers, getVpnGroups, addVpnUser } from "./vpn.js";
+import {
+  getVpnUsers,
+  getVpnGroups,
+  addVpnUser,
+  getVpnInviteUsers,
+} from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
 
@@ -630,7 +635,36 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
-      // 5.10a. VPN (NetBird) — создать/пригласить пользователя.
+      // 5.10a. VPN (NetBird) — список приглашенных пользователей.
+      if (pathname === "/api/vpn/inviteusers" && request.method === "GET") {
+        try {
+          const users = await getVpnInviteUsers(env);
+
+          console.log("[API VPN USERS] Получено:", {
+            count: users.length,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ users, total: users.length });
+        } catch (error) {
+          console.error("[API VPN USERS] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось получить список пользователей VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10b. VPN (NetBird) — создать/пригласить пользователя.
       if (pathname === "/api/vpn/users" && request.method === "POST") {
         try {
           const body = await request.json();
@@ -669,7 +703,7 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
-      // 5.10b. VPN (NetBird) — список групп.
+      // 5.10c. VPN (NetBird) — список групп.
       if (pathname === "/api/vpn/groups" && request.method === "GET") {
         try {
           const groups = await getVpnGroups(env);
@@ -698,7 +732,7 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
-      // 5.10c. Группы VPN из нашей БД (каталог vpn_groups).
+      // 5.10d. Группы VPN из нашей БД (каталог vpn_groups).
       if (pathname === "/api/vpn/groups/db" && request.method === "GET") {
         if (!isMembersAllowed(env, session.username)) {
           return jsonAuthResponse({ error: "Нет доступа" }, 403);
@@ -721,7 +755,7 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
-      // 5.10d. Синхронизация групп NetBird → наша БД (каталог vpn_groups).
+      // 5.10e. Синхронизация групп NetBird → наша БД (каталог vpn_groups).
       if (pathname === "/api/vpn/groups/sync" && request.method === "POST") {
         if (!isMembersAllowed(env, session.username)) {
           return jsonAuthResponse({ error: "Нет доступа" }, 403);
