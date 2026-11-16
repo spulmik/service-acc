@@ -157,9 +157,9 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, User, Clock, Refresh, Delete, MoreFilled} from '@element-plus/icons-vue'
-import { getInviteUsers, regenerateInvite } from '@/api/Vpn/users.js'
+import { getInviteUsers, regenerateInvite, deleteInvite} from '@/api/Vpn/users.js'
 import {
   initial,
   avatarColor,
@@ -219,11 +219,42 @@ async function onRegenerate(row) {
   }
 }
 
-function onDelete(row) {
-  // TODO: удаление приглашения из NetBird
-  ElMessage.info(`Delete: ${row.name || row.email}`)
-}
+async function onDelete(row) {
+  if (!row.id) {
+    ElMessage.error('У приглашения нет ID')
+    return
+  }
 
+  try {
+    await ElMessageBox.confirm(
+      `Удалить приглашение для «${row.name || row.email}»? Ссылка-приглашение перестанет работать.`,
+      'Удаление приглашения',
+      {
+        type: 'warning',
+        confirmButtonText: 'Удалить',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    // Пользователь отменил удаление.
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await deleteInvite(row.id)
+    ElMessage.success(`Приглашение для «${row.email}» удалено`)
+    await load()
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось удалить приглашение'
+    )
+  } finally {
+    loading.value = false
+  }
+}
 
 const pagedTableData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value

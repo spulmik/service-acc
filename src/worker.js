@@ -19,6 +19,7 @@ import {
   addVpnUser,
   getVpnInviteUsers,
   regenerateVpnInvite,
+  deleteVpnInvite,
 } from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
@@ -698,6 +699,45 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось перегенерировать приглашение VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10a3. VPN (NetBird) — удаление приглашения.
+      if (
+        pathname.startsWith("/api/vpn/inviteusers/") &&
+        pathname.endsWith("/delete") &&
+        request.method === "POST"
+      ) {
+        const inviteId = pathname.slice(
+          "/api/vpn/inviteusers/".length,
+          -"/delete".length,
+        );
+
+        try {
+          const invite = await deleteVpnInvite(env, inviteId);
+
+          console.log("[API VPN INVITE DELETE] Приглашение удалено:", {
+            inviteId,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ invite });
+        } catch (error) {
+          console.error("[API VPN INVITE DELETE] Ошибка:", {
+            inviteId,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось удалить приглашение VPN",
             },
             502,
           );

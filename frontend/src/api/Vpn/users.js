@@ -110,6 +110,28 @@ export async function regenerateInvite(inviteId) {
 
   return data;
 }
+// Удаляем приглашение
+export async function deleteInvite(inviteId) {
+  const response = await fetch(
+    `/api/vpn/inviteusers/${encodeURIComponent(inviteId)}/delete`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка удаления приглашения: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
 
 // Группы из нашей БД (каталог).
 export async function getStoredGroups() {

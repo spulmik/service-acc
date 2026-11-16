@@ -245,3 +245,38 @@ export async function regenerateVpnInvite(env, inviteId) {
   // invite_token наружу не отдаём — только публичные поля.
   return data ? toPublicVpnInvite(data) : null;
 }
+
+// Удаление приглашения NetBird
+// DELETE {base}/api/users/invites/{inviteId}
+// Док: https://docs.netbird.io/api/resources/users#delete-a-user-invite
+export async function deleteVpnInvite(env, inviteId) {
+  const token = getToken(env);
+  const id = String(inviteId || "").trim();
+
+  if (!id) {
+    throw new Error("Не указан ID приглашения");
+  }
+
+  const url = `${getBase(env)}/api/users/invites/${encodeURIComponent(id)}`;
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird delete invite HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  // DELETE обычно возвращает пустое тело — ничего не парсим.
+  return { ok: true };
+}
