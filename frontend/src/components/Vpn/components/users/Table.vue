@@ -94,15 +94,33 @@
       </el-table-column>
       <el-table-column label="" width="60" align="center">
         <template #default="{ row }">
-          <el-button
-            text
-            circle
-            size="small"
-            class="row-actions"
-            @click="onRowAction(row)"
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            popper-class="vpn-row-menu"
+            @command="(cmd) => onCommand(cmd, row)"
           >
-            <el-icon :size="18"><MoreFilled /></el-icon>
-          </el-button>
+            <el-button
+              text
+              circle
+              size="small"
+              class="row-actions"
+              @click.stop
+            >
+              <el-icon :size="18"><MoreFilled /></el-icon>
+            </el-button>
+
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="block" class="is-danger">
+                  <el-icon><CircleClose /></el-icon>Block
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" class="is-danger">
+                  <el-icon><Delete /></el-icon>Delete
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -124,7 +142,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, User, Clock, MoreFilled } from '@element-plus/icons-vue'
+import { Search, User, Clock, MoreFilled, CircleClose, Delete } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/Vpn/users.js'
 import {
   initial,
@@ -146,9 +164,19 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 
 
-function onRowAction(row) {
-  // TODO: открыть меню действий (редактировать / удалить) для row
-  console.log('row action', row)
+function onCommand(command, row) {
+  if (command === 'block') onBlock(row)
+  else if (command === 'delete') onDelete(row)
+}
+
+function onBlock(row) {
+  // TODO: блокировка/разблокировка пользователя в NetBird
+  ElMessage.info(`Block: ${row.name || row.email}`)
+}
+
+function onDelete(row) {
+  // TODO: удаление пользователя из NetBird
+  ElMessage.info(`Delete: ${row.name || row.email}`)
 }
 
 const filterTableData = computed(() => {
@@ -324,5 +352,20 @@ defineExpose({ load })
   justify-content: flex-end;
   padding-top: 12px;
   margin-top: 16px;
+}
+</style>
+
+<!-- Меню действий строки телепортируется в body — стили не scoped. -->
+<style>
+.vpn-row-menu .el-dropdown-menu__item {
+  gap: 8px;
+}
+
+.vpn-row-menu .el-dropdown-menu__item.is-danger {
+  color: var(--el-color-danger);
+}
+
+.vpn-row-menu .el-dropdown-menu__item.is-danger:hover {
+  background-color: var(--el-color-danger-light-9);
 }
 </style>

@@ -108,6 +108,38 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
+
+      <el-table-column label="" width="60" align="center">
+        <template #default="{ row }">
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            popper-class="vpn-row-menu"
+            @command="(cmd) => onCommand(cmd, row)"
+          >
+            <el-button
+              text
+              circle
+              size="small"
+              class="row-actions"
+              @click.stop
+            >
+              <el-icon :size="18"><MoreFilled /></el-icon>
+            </el-button>
+
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="refresh">
+                  <el-icon><Refresh /></el-icon>Regenerate
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" class="is-danger">
+                  <el-icon><Delete /></el-icon>Delete
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="table-footer">
@@ -126,8 +158,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, User, Clock } from '@element-plus/icons-vue'
-import { getInviteUsers } from '@/api/Vpn/users.js'
+import { Search, User, Clock, Refresh, Delete, MoreFilled} from '@element-plus/icons-vue'
+import { getInviteUsers, regenerateInvite } from '@/api/Vpn/users.js'
 import {
   initial,
   avatarColor,
@@ -159,6 +191,39 @@ const filterTableData = computed(() => {
     ),
   )
 })
+
+
+function onCommand(command, row) {
+  if (command === 'refresh') onRegenerate(row)
+  else if (command === 'delete') onDelete(row)
+}
+
+async function onRegenerate(row) {
+  if (!row.id) {
+    ElMessage.error('У приглашения нет ID')
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await regenerateInvite(row.id)
+    ElMessage.success(`Приглашение для «${row.email}» обновлено`)
+    await load()
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось обновить приглашение'
+    )
+  } finally {
+    loading.value = false
+  }
+}
+
+function onDelete(row) {
+  // TODO: удаление приглашения из NetBird
+  ElMessage.info(`Delete: ${row.name || row.email}`)
+}
+
 
 const pagedTableData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value

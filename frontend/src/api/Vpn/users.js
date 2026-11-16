@@ -88,6 +88,29 @@ export async function addUser({
   return data;
 }
 
+// Перегенерировать приглашение NetBird (продлить срок, выдать новый токен).
+// Старая ссылка-приглашение после этого перестаёт работать.
+export async function regenerateInvite(inviteId) {
+  const response = await fetch(
+    `/api/vpn/inviteusers/${encodeURIComponent(inviteId)}/regenerate`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка перегенерации приглашения: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
 // Группы из нашей БД (каталог).
 export async function getStoredGroups() {
   const response = await fetch("/api/vpn/groups/db", {

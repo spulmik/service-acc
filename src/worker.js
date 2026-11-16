@@ -18,6 +18,7 @@ import {
   getVpnGroups,
   addVpnUser,
   getVpnInviteUsers,
+  regenerateVpnInvite,
 } from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
@@ -658,6 +659,45 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось получить список пользователей VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10a2. VPN (NetBird) — перегенерация приглашения.
+      if (
+        pathname.startsWith("/api/vpn/inviteusers/") &&
+        pathname.endsWith("/regenerate") &&
+        request.method === "POST"
+      ) {
+        const inviteId = pathname.slice(
+          "/api/vpn/inviteusers/".length,
+          -"/regenerate".length,
+        );
+
+        try {
+          const invite = await regenerateVpnInvite(env, inviteId);
+
+          console.log("[API VPN INVITE REGENERATE] Приглашение обновлено:", {
+            inviteId,
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ invite });
+        } catch (error) {
+          console.error("[API VPN INVITE REGENERATE] Ошибка:", {
+            inviteId,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось перегенерировать приглашение VPN",
             },
             502,
           );

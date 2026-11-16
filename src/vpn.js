@@ -207,3 +207,41 @@ export async function addVpnUser(
 
   return response.json().catch(() => null);
 }
+
+// Перегенерация приглашения NetBird: продлевает срок и выдаёт новый
+// invite_token (старая ссылка перестаёт работать).
+// POST {base}/api/users/invites/{inviteId}/regenerate
+// Док: https://docs.netbird.io/api/resources/users
+export async function regenerateVpnInvite(env, inviteId) {
+  const token = getToken(env);
+  const id = String(inviteId || "").trim();
+
+  if (!id) {
+    throw new Error("Не указан ID приглашения");
+  }
+
+  const url = `${getBase(env)}/api/users/invites/${encodeURIComponent(id)}/regenerate`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird regenerate invite HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json().catch(() => null);
+
+  // invite_token наружу не отдаём — только публичные поля.
+  return data ? toPublicVpnInvite(data) : null;
+}
