@@ -306,6 +306,32 @@ export async function getCloudContactUsers(env, type, forceRefresh = false) {
   return fetchAndCacheUsers(env, type);
 }
 
+// Команды (teams) тенанта: GET /configapi/v2/team → список. Возвращаем имена.
+// Нужны для drag-and-drop в номерном плане (3 миниокна Osn/Msp/Back).
+export async function getCloudContactTeams(env, type) {
+  const tenant = getTenant(type);
+
+  let token = await getCloudContactToken(env, type);
+
+  let list;
+  try {
+    list = await ccGet(tenant.host, "/team", token);
+  } catch (error) {
+    if (error.status === 401) {
+      token = await getCloudContactToken(env, type, true);
+      list = await ccGet(tenant.host, "/team", token);
+    } else {
+      throw error;
+    }
+  }
+
+  const items = Array.isArray(list) ? list : list?.items || list?.teams || [];
+
+  return items
+    .map((t) => (typeof t === "string" ? t : t?.name))
+    .filter(Boolean);
+}
+
 // 3. Прогрев кэша: заранее собираем список по всем тенантам, чтобы даже самый
 //    первый заход пользователя был мгновенным. Вызывается при старте сервера и
 //    по расписанию (см. server.js). Ошибка по одному тенанту (например, не

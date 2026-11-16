@@ -11,7 +11,7 @@ import {
   deleteRegUser,
 } from "./reg.js";
 
-import { getCloudContactUsers } from "./cloudcontact.js";
+import { getCloudContactUsers, getCloudContactTeams } from "./cloudcontact.js";
 
 import {
   getVpnUsers,
@@ -29,6 +29,13 @@ import { generatePassword } from "./functions.js";
 import { listMembersDecrypted, upsertMember } from "../server/members.js";
 
 import { listVpnGroups, syncVpnGroups } from "../server/groups.js";
+import { listPhonePlan, assignTeamGroup } from "../server/phonePlan.js";
+import {
+  listPhoneGroups,
+  createPhoneGroup,
+  updatePhoneGroup,
+  deletePhoneGroup,
+} from "../server/phoneGroups.js";
 
 import { handleCreateMailbox } from "./activities/rest/create_mailbox/handler.js";
 import {
@@ -461,6 +468,42 @@ async function handleRequest(request, env, ctx) {
                   : "Не удалось удалить почтовый ящик",
             },
             400,
+          );
+        }
+      }
+
+      // 5.6c. CloudContact — список команд (teams) тенанта. Должен стоять
+      // ПЕРЕД роутом пользователей, иначе /{type}/teams перехватится им.
+      if (
+        pathname.startsWith("/api/cloudcontact/") &&
+        pathname.endsWith("/teams") &&
+        request.method === "GET"
+      ) {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const type = pathname.slice("/api/cloudcontact/".length).split("/")[0];
+
+        try {
+          const teams = await getCloudContactTeams(env, type);
+
+          return jsonAuthResponse({ teams, total: teams.length, type });
+        } catch (error) {
+          console.error("[API CLOUDCONTACT TEAMS] Ошибка:", {
+            type,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось получить команды CloudContact",
+            },
+            502,
           );
         }
       }
@@ -949,6 +992,169 @@ async function handleRequest(request, env, ctx) {
             },
             502,
           );
+        }
+      }
+
+      // 5.10f. Номерной план телефонии — список строк.
+      if (pathname === "/api/phoneplan" && request.method === "GET") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const rows = await listPhonePlan();
+
+          return jsonAuthResponse({ rows, total: rows.length });
+        } catch (error) {
+          console.error("[API PHONEPLAN] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            { error: "Не удалось получить номерной план" },
+            500,
+          );
+        }
+      }
+
+      // 5.10g. Номерной план — привязать команду к группе (drag-and-drop).
+      if (pathname === "/api/phoneplan/assign" && request.method === "POST") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const body = await request.json();
+          const row = await assignTeamGroup(body);
+
+          return jsonAuthResponse({ row });
+        } catch (error) {
+          console.error("[API PHONEPLAN ASSIGN] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось привязать команду к группе",
+            },
+            400,
+          );
+        }
+      }
+
+      // 5.10i. Группы номерного плана — список / создание.
+      if (pathname === "/api/phonegroups" && request.method === "GET") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const groups = await listPhoneGroups();
+
+          return jsonAuthResponse({ groups, total: groups.length });
+        } catch (error) {
+          console.error("[API PHONEGROUPS] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            { error: "Не удалось получить группы" },
+            500,
+          );
+        }
+      }
+
+      if (pathname === "/api/phonegroups" && request.method === "POST") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const body = await request.json();
+          const group = await createPhoneGroup(body?.name);
+
+          return jsonAuthResponse({ group });
+        } catch (error) {
+          console.error("[API PHONEGROUPS CREATE] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось создать группу",
+            },
+            400,
+          );
+        }
+      }
+
+      // 5.10j. Группы — обновление диапазона / удаление по id.
+      if (pathname.startsWith("/api/phonegroups/")) {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const id = Number(pathname.slice("/api/phonegroups/".length));
+
+        if (!Number.isInteger(id) || id <= 0) {
+          return jsonAuthResponse({ error: "Некорректный id" }, 400);
+        }
+
+        if (request.method === "PUT") {
+          try {
+            const body = await request.json();
+            const group = await updatePhoneGroup(id, body);
+
+            if (!group) {
+              return jsonAuthResponse({ error: "Группа не найдена" }, 404);
+            }
+
+            return jsonAuthResponse({ group });
+          } catch (error) {
+            console.error("[API PHONEGROUPS UPDATE] Ошибка:", {
+              id,
+              message:
+                error instanceof Error ? error.message : "Unknown error",
+            });
+
+            return jsonAuthResponse(
+              { error: "Не удалось обновить группу" },
+              400,
+            );
+          }
+        }
+
+        if (request.method === "DELETE") {
+          try {
+            const ok = await deletePhoneGroup(id);
+
+            if (!ok) {
+              return jsonAuthResponse({ error: "Группа не найдена" }, 404);
+            }
+
+            return jsonAuthResponse({ ok: true });
+          } catch (error) {
+            console.error("[API PHONEGROUPS DELETE] Ошибка:", {
+              id,
+              message:
+                error instanceof Error ? error.message : "Unknown error",
+            });
+
+            return jsonAuthResponse(
+              { error: "Не удалось удалить группу" },
+              500,
+            );
+          }
         }
       }
 

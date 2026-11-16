@@ -40,6 +40,25 @@ export async function getUsers(type, { refresh = false } = {}) {
   return data;
 }
 
+// Команды (teams) тенанта — для drag-and-drop номерного плана.
+export async function getTeams(type) {
+  const response = await fetch(`${baseUrl(type)}/teams`, {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка получения команд: HTTP ${response.status}`,
+    );
+  }
+
+  return data?.teams || [];
+}
+
 export async function createUser(type, userData) {
   const response = await fetch(baseUrl(type), {
     method: "POST",
