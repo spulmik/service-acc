@@ -280,3 +280,105 @@ export async function deleteVpnInvite(env, inviteId) {
   // DELETE обычно возвращает пустое тело — ничего не парсим.
   return { ok: true };
 }
+
+// Удаление пользователя NetBird.
+// DELETE {base}/api/users/{userId}
+// Док: https://docs.netbird.io/api/resources/users#delete-a-user
+export async function deleteVpnUser(env, userId) {
+  const token = getToken(env);
+  const id = String(userId || "").trim();
+
+  if (!id) {
+    throw new Error("Не указан ID пользователя");
+  }
+
+  const url = `${getBase(env)}/api/users/${encodeURIComponent(id)}`;
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird delete user HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  // DELETE обычно возвращает пустое тело.
+  return { ok: true };
+}
+
+// Блокировка / разблокировка пользователя NetBird.
+// NetBird обновляет пользователя через PUT {base}/api/users/{userId}, причём
+// role и auto_groups в теле ОБЯЗАТЕЛЬНЫ — поэтому сначала берём текущие данные
+// пользователя из списка (отдельного GET одного пользователя у NetBird нет).
+// Док: https://docs.netbird.io/api/resources/users#update-a-user
+export async function setVpnUserBlocked(env, userId, blocked) {
+  const token = getToken(env);
+  const id = String(userId || "").trim();
+
+  if (!id) {
+    throw new Error("Не указан ID пользователя");
+  }
+
+  const base = getBase(env);
+  const authHeaders = {
+    Accept: "application/json",
+    Authorization: `Token ${token}`,
+  };
+
+  // Текущие role и auto_groups пользователя (нужны для PUT).
+  const listResp = await fetch(`${base}/api/users`, { headers: authHeaders });
+
+  if (!listResp.ok) {
+    const text = await listResp.text().catch(() => "");
+    const error = new Error(
+      `NetBird list users HTTP ${listResp.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = listResp.status;
+    throw error;
+  }
+
+  const list = await listResp.json().catch(() => []);
+  const current = (Array.isArray(list) ? list : []).find((u) => u?.id === id);
+
+  if (!current) {
+    throw new Error("Пользователь не найден в NetBird");
+  }
+
+  const response = await fetch(`${base}/api/users/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      role: current.role || "user",
+      auto_groups: Array.isArray(current.auto_groups) ? current.auto_groups : [],
+      is_blocked: Boolean(blocked),
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const error = new Error(
+      `NetBird ${blocked ? "block" : "unblock"} user HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`,
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json().catch(() => null);
+
+  return data ? toPublicVpnUser(data) : null;
+}

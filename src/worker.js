@@ -20,6 +20,8 @@ import {
   getVpnInviteUsers,
   regenerateVpnInvite,
   deleteVpnInvite,
+  deleteVpnUser,
+  setVpnUserBlocked,
 } from "./vpn.js";
 
 import { generatePassword } from "./functions.js";
@@ -783,6 +785,87 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
+      // 5.10b2. VPN (NetBird) — удаление пользователя.
+      if (
+        pathname.startsWith("/api/vpn/users/") &&
+        pathname.endsWith("/deleteusr") &&
+        request.method === "POST"
+      ) {
+        const userId = pathname.slice(
+          "/api/vpn/users/".length,
+          -"/deleteusr".length,
+        );
+
+        try {
+          const result = await deleteVpnUser(env, userId);
+
+          console.log("[API VPN DELETE] Пользователь удалён:", {
+            userId,
+            username: session.username,
+          });
+
+          return jsonAuthResponse(result);
+        } catch (error) {
+          console.error("[API VPN DELETE] Ошибка:", {
+            userId,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось удалить пользователя VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.10b3. VPN (NetBird) — блокировка / разблокировка пользователя.
+      if (
+        pathname.startsWith("/api/vpn/users/") &&
+        pathname.endsWith("/block") &&
+        request.method === "POST"
+      ) {
+        const userId = pathname.slice(
+          "/api/vpn/users/".length,
+          -"/block".length,
+        );
+
+        try {
+          const body = await request.json().catch(() => ({}));
+          const user = await setVpnUserBlocked(env, userId, Boolean(body.blocked));
+
+          console.log("[API VPN BLOCK] Статус пользователя изменён:", {
+            userId,
+            blocked: Boolean(body.blocked),
+            username: session.username,
+          });
+
+          return jsonAuthResponse({ user });
+        } catch (error) {
+          console.error("[API VPN BLOCK] Ошибка:", {
+            userId,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось изменить статус пользователя VPN",
+            },
+            502,
+          );
+        }
+      }
+
+      
       // 5.10c. VPN (NetBird) — список групп.
       if (pathname === "/api/vpn/groups" && request.method === "GET") {
         try {

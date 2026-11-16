@@ -132,6 +132,54 @@ export async function deleteInvite(inviteId) {
   return data;
 }
 
+// Удалить пользователя VPN (NetBird).
+export async function deleteUser(userId) {
+  const response = await fetch(
+    `/api/vpn/users/${encodeURIComponent(userId)}/deleteusr`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка удаления пользователя: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
+// Заблокировать / разблокировать пользователя VPN (NetBird).
+export async function blockUser(userId, blocked) {
+  const response = await fetch(
+    `/api/vpn/users/${encodeURIComponent(userId)}/block`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ blocked: Boolean(blocked) }),
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка изменения статуса пользователя: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
 
 // Группы из нашей БД (каталог).
 export async function getStoredGroups() {

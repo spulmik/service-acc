@@ -64,8 +64,11 @@
       <el-table-column label="Статус" min-width="120">
         <template #default="{ row }">
           <span class="status">
-            <span class="status-dot" :class="statusClass(row.status)"></span>
-            {{ statusLabel(row.status) }}
+            <span
+              class="status-dot"
+              :class="row.is_blocked ? 'is-blocked' : statusClass(row.status)"
+            ></span>
+            {{ row.is_blocked ? 'Заблокирован' : statusLabel(row.status) }}
           </span>
         </template>
       </el-table-column>
@@ -112,8 +115,11 @@
 
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="block" class="is-danger">
-                  <el-icon><CircleClose /></el-icon>Block
+                <el-dropdown-item
+                  command="block"
+                  :class="{ 'is-danger': !row.is_blocked }"
+                >
+                  <el-icon><CircleClose /></el-icon>{{ row.is_blocked ? 'Unblock' : 'Block' }}
                 </el-dropdown-item>
                 <el-dropdown-item command="delete" class="is-danger">
                   <el-icon><Delete /></el-icon>Delete
@@ -141,9 +147,9 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, User, Clock, MoreFilled, CircleClose, Delete } from '@element-plus/icons-vue'
-import { getUsers } from '@/api/Vpn/users.js'
+import { getUsers, deleteUser, blockUser } from '@/api/Vpn/users.js'
 import {
   initial,
   avatarColor,
@@ -169,16 +175,87 @@ function onCommand(command, row) {
   else if (command === 'delete') onDelete(row)
 }
 
-function onBlock(row) {
-  // TODO: блокировка/разблокировка пользователя в NetBird
-  ElMessage.info(`Block: ${row.name || row.email}`)
+async function onBlock(row) {
+  if (!row.id) {
+    ElMessage.error('У пользователя нет ID')
+    return
+  }
+
+  const willBlock = !row.is_blocked
+
+  try {
+    await ElMessageBox.confirm(
+      willBlock
+        ? `Заблокировать пользователя «${row.name || row.email}»? Он потеряет доступ к VPN.`
+        : `Разблокировать пользователя «${row.name || row.email}»?`,
+      willBlock ? 'Блокировка пользователя' : 'Разблокировка пользователя',
+      {
+        type: 'warning',
+        confirmButtonText: willBlock ? 'Заблокировать' : 'Разблокировать',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: willBlock ? 'el-button--danger' : '',
+      }
+    )
+  } catch {
+    // Пользователь отменил действие.
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await blockUser(row.id, willBlock)
+    ElMessage.success(
+      willBlock
+        ? `Пользователь «${row.email}» заблокирован`
+        : `Пользователь «${row.email}» разблокирован`
+    )
+    await load()
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось изменить статус пользователя'
+    )
+  } finally {
+    loading.value = false
+  }
 }
 
-function onDelete(row) {
-  // TODO: удаление пользователя из NetBird
-  ElMessage.info(`Delete: ${row.name || row.email}`)
-}
+async function onDelete(row) {
+  if (!row.id) {
+    ElMessage.error('У пользователя нет ID')
+    return
+  }
 
+  try {
+    await ElMessageBox.confirm(
+      `Удалить пользователя «${row.name || row.email}»? Пользователь будет удалён из системы.`,
+      'Удаление пользователя',
+      {
+        type: 'warning',
+        confirmButtonText: 'Удалить',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    // Пользователь отменил удаление.
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await deleteUser(row.id)
+    ElMessage.success(`Пользователь «${row.email}» удален`)
+    await load()
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось удалить пользователя'
+    )
+  } finally {
+    loading.value = false
+  }
+}
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
 
