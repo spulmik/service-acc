@@ -14,6 +14,7 @@ import worker from "./src/worker.js";
 import { createKvRedis } from "./server/kv-redis.js";
 import { createKvFile } from "./server/kv-file.js";
 import { createAssets } from "./server/assets.js";
+import { warmCloudContactCache } from "./src/cloudcontact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -151,6 +152,34 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// --- Прогрев кэша CloudContact ---
+// Список пользователей собирается дорого (N+1 к BrightPattern), поэтому
+// заранее греем кэш при старте и периодически — чтобы даже первый заход был
+// мгновенным. Интервал держим меньше срока свежести кэша (USERS_FRESH_TTL=1ч),
+// чтобы данные не успевали протухать. В cluster-режиме pm2 греет только
+// первый инстанс (NODE_APP_INSTANCE), чтобы не дублировать нагрузку.
+const WARM_ENABLED = process.env.CLOUD_CONTACT_WARM !== "0";
+const WARM_INTERVAL_MS =
+  Number(process.env.CLOUD_CONTACT_WARM_INTERVAL_MS) || 50 * 60 * 1000;
+const IS_PRIMARY =
+  !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
+
+function warmCloudContact() {
+  warmCloudContactCache(env).catch((err) =>
+    console.error(
+      "[server] Прогрев CloudContact:",
+      err instanceof Error ? err.message : err,
+    ),
+  );
+}
+
 server.listen(PORT, () => {
   console.log(`service-acc слушает :${PORT} (assets: ${ASSETS_DIR})`);
+
+  if (WARM_ENABLED && IS_PRIMARY) {
+    // Небольшая задержка — дать Redis подключиться перед первой записью.
+    setTimeout(warmCloudContact, 3000);
+    // Периодический прогрев; unref() — чтобы таймер не держал процесс.
+    setInterval(warmCloudContact, WARM_INTERVAL_MS).unref();
+  }
 });

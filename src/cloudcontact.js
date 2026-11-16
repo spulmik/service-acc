@@ -25,8 +25,21 @@ const TENANTS = {
 // Сколько деталей тянуть одновременно (/user/:username). Больше — быстрее,
 // но не перегружаем BrightPattern. 8 — разумный компромисс.
 const DETAIL_CONCURRENCY = 16;
-// Кэш готового списка пользователей (секунды). Повторный заход — мгновенный.
-const USERS_CACHE_TTL = 500;
+// Stale-while-revalidate для списка пользователей:
+//   USERS_FRESH_TTL   — сколько секунд данные считаем «свежими». После этого
+//                       запрос всё равно получает кэш МГНОВЕННО, а свежие
+//                       данные подтягиваются в фоне (пользователь не ждёт).
+//   USERS_CACHE_HARD_TTL — сколько держим запись в KV вообще, чтобы было что
+//                       отдать как stale. Больше срока свежести.
+const USERS_FRESH_TTL = 3600; // 1 час
+const USERS_CACHE_HARD_TTL = 86400; // 1 сутки
+
+// Защита от «стада»: один фоновый пересбор на тип за раз (в рамках процесса).
+const inFlightRefresh = new Map();
+
+function nowSec() {
+  return Math.floor(Date.now() / 1000);
+}
 // Запас, на сколько раньше срока считать токен «протухшим».
 const TOKEN_EXPIRY_BUFFER = 60;
 // Если сервер не вернул expires_in — считаем токен живым столько секунд.
@@ -149,24 +162,13 @@ async function mapWithConcurrency(items, limit, fn) {
   return results;
 }
 
-// 2. Список пользователей: /phone/user даёт краткую информацию,
-//    затем по каждому /user/:username берём полную (параллельно).
-//    Результат кэшируем на USERS_CACHE_TTL секунд.
-export async function getCloudContactUsers(env, type, forceRefresh = false) {
+// Тяжёлый путь: /phone/user даёт краткий список, затем по каждому
+// /user/:username берём детали (параллельно). Результат пишем в кэш в формате
+// { data, fetchedAt } и возвращаем. Это и есть «пересбор».
+async function fetchAndCacheUsers(env, type) {
   const tenant = getTenant(type);
   const store = getStore(env);
   const cacheKey = `cc:users:${type}`;
-
-  if (store && !forceRefresh) {
-    const cached = await store.get(cacheKey).catch(() => null);
-    if (cached) {
-      try {
-        return JSON.parse(cached);
-      } catch {
-        // битый кэш — просто перезапросим
-      }
-    }
-  }
 
   let token = await getCloudContactToken(env, type);
 
@@ -185,29 +187,47 @@ export async function getCloudContactUsers(env, type, forceRefresh = false) {
 
   const items = Array.isArray(list) ? list : list?.items || list?.users || [];
 
-  // Имена пользователей из краткого списка.
-  const names = items
-    .map((item) => item?.username || item?.loginId || item?.name || item?.user)
-    .filter(Boolean);
+  const usernameOf = (item) =>
+    item?.username || item?.loginId || item?.name || item?.user;
 
-  // Детали — параллельно, с ограничением одновременных запросов.
+  // Детали — параллельно, с ограничением одновременных запросов. Для таблицы
+  // оставляем только нужные поля: краткие (extension/loginId/ФИО) + из деталей
+  // (team/disabled). Меньше данных в кэше и в браузере.
   const users = await mapWithConcurrency(
-    names,
+    items,
     DETAIL_CONCURRENCY,
-    async (username) => {
+    async (item) => {
+      // Поля из краткого списка /phone/user.
+      const base = {
+        extension: item?.extension ?? "",
+        loginId: item?.loginId ?? "",
+        lastName: item?.lastName ?? "",
+        firstName: item?.firstName ?? "",
+        team: "",
+        disabled: false,
+      };
+
+      const username = usernameOf(item);
+      if (!username) {
+        return base;
+      }
+
+      // Детали из /user/:username — берём только team и disabled.
       try {
-        return await ccGet(
+        const detail = await ccGet(
           tenant.host,
           `/user/${encodeURIComponent(username)}`,
           token,
         );
+
+        return {
+          ...base,
+          team: detail?.team ?? "",
+          disabled: Boolean(detail?.disabled),
+        };
       } catch {
-        // Не получили детали — вернём хотя бы краткую запись.
-        return items.find(
-          (item) =>
-            (item?.username || item?.loginId || item?.name || item?.user) ===
-            username,
-        );
+        // Детали не достали — отдаём хотя бы краткую запись.
+        return base;
       }
     },
   );
@@ -216,11 +236,98 @@ export async function getCloudContactUsers(env, type, forceRefresh = false) {
 
   if (store) {
     await store
-      .put(cacheKey, JSON.stringify(result), {
-        expirationTtl: USERS_CACHE_TTL,
+      .put(cacheKey, JSON.stringify({ data: result, fetchedAt: nowSec() }), {
+        expirationTtl: USERS_CACHE_HARD_TTL,
       })
       .catch(() => {});
   }
 
   return result;
+}
+
+// Запустить фоновый пересбор (не дожидаясь). В Node процесс долгоживущий, так
+// что промис доживёт и обновит кэш. Повторные вызовы по тому же типу схлопываем.
+function triggerBackgroundRefresh(env, type) {
+  if (inFlightRefresh.has(type)) {
+    return;
+  }
+
+  const task = fetchAndCacheUsers(env, type)
+    .catch((error) => {
+      console.error("[CloudContact] Фоновое обновление кэша не удалось", {
+        type,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    })
+    .finally(() => {
+      inFlightRefresh.delete(type);
+    });
+
+  inFlightRefresh.set(type, task);
+}
+
+// 2. Список пользователей (stale-while-revalidate):
+//    — есть свежий кэш → отдаём сразу;
+//    — кэш протух (старше USERS_FRESH_TTL), но есть → отдаём stale СРАЗУ и
+//      обновляем в фоне;
+//    — кэша нет или forceRefresh → собираем синхронно (единственный «долгий»
+//      случай, обычно только самый первый заход).
+export async function getCloudContactUsers(env, type, forceRefresh = false) {
+  const store = getStore(env);
+  const cacheKey = `cc:users:${type}`;
+
+  if (store && !forceRefresh) {
+    const cached = await store.get(cacheKey).catch(() => null);
+
+    if (cached) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(cached);
+      } catch {
+        // битый кэш — упадём в полный пересбор ниже
+      }
+
+      // Поддержка старого формата (чистый массив) и нового ({data, fetchedAt}).
+      const data = Array.isArray(parsed) ? parsed : parsed?.data;
+      const fetchedAt = Array.isArray(parsed) ? 0 : parsed?.fetchedAt || 0;
+
+      if (Array.isArray(data)) {
+        if (nowSec() - fetchedAt >= USERS_FRESH_TTL) {
+          // Протухло — отдаём stale, свежее подтянется в фоне.
+          triggerBackgroundRefresh(env, type);
+        }
+
+        return data;
+      }
+    }
+  }
+
+  // Нет кэша или принудительное обновление — тяжёлый путь синхронно.
+  return fetchAndCacheUsers(env, type);
+}
+
+// 3. Прогрев кэша: заранее собираем список по всем тенантам, чтобы даже самый
+//    первый заход пользователя был мгновенным. Вызывается при старте сервера и
+//    по расписанию (см. server.js). Ошибка по одному тенанту (например, не
+//    настроен секрет) не роняет остальные. Тенанты идут последовательно, чтобы
+//    не бить по BrightPattern тройной нагрузкой разом.
+export async function warmCloudContactCache(env, types = Object.keys(TENANTS)) {
+  const results = [];
+
+  for (const type of types) {
+    try {
+      const users = await fetchAndCacheUsers(env, type);
+
+      console.log("[CloudContact] Кэш прогрет", { type, count: users.length });
+      results.push({ type, ok: true, count: users.length });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error";
+
+      console.error("[CloudContact] Прогрев кэша не удался", { type, message });
+      results.push({ type, ok: false, error: message });
+    }
+  }
+
+  return results;
 }
