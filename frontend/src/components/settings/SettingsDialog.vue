@@ -26,7 +26,7 @@
 
       <!-- Форма настроек. Поля — временные, будешь менять под свои настройки. -->
       <el-form :model="form" label-position="top">
-        <el-form-item label="Домен по умолчанию">
+        <!-- <el-form-item label="Домен по умолчанию">
           <el-select v-model="form.defaultDomain" style="width: 100%">
             <el-option
               label="@energy-team.ru (Яндекс 360)"
@@ -37,16 +37,21 @@
               value="energy-team.club"
             />
           </el-select>
-        </el-form-item>
+        </el-form-item> -->
 
-        <el-form-item label="Действие NetBird по умолчанию">
+        <!-- <el-form-item label="Действие NetBird по умолчанию">
           <el-radio-group v-model="form.vpnDefaultMode">
             <el-radio value="invite">Пригласить</el-radio>
             <el-radio value="create">Создать</el-radio>
           </el-radio-group>
+        </el-form-item> -->
+
+        <el-form-item label="Номерной план телефонии">
+          <el-button @click="phoneplanemodal = true"><el-icon><Edit /></el-icon></el-button>
         </el-form-item>
-        <!-- сюда добавляй новые настройки -->
       </el-form>
+
+      <PhoneModalDialog v-model="phoneplanemodal" />
 
       <div class="settings-footer">
         <el-button @click="visible = false">Отмена</el-button>
@@ -62,6 +67,8 @@
 import { reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { syncGroups } from '@/api/Vpn/users.js'
+import { Edit } from '@element-plus/icons-vue'
+import PhoneModalDialog from './PhoneModalSettins.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -72,11 +79,12 @@ const emit = defineEmits(['update:modelValue', 'submit'])
 const visible = ref(props.modelValue)
 const syncing = ref(false)
 const saving = ref(false)
+const phoneplanemodal = ref(false)
 
-// Значения формы (пока дефолты из текущего хардкода — заменишь на свои).
+// Значения формы (пока пусто — поля добавишь по мере настроек).
 const form = reactive({
-  defaultDomain: 'energy-team.club',
-  vpnDefaultMode: 'invite',
+  // defaultDomain: 'energy-team.club',
+  // vpnDefaultMode: 'invite',
 })
 
 watch(

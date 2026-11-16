@@ -5,6 +5,8 @@
       <template #header>
         <div class="card-header">
           <strong>Реестр управления УЗ</strong>
+
+          <el-button @click="settingsVisible = true">Настройки</el-button>
           <el-button @click="GlobalAddUser">
             <el-icon><Plus /></el-icon>
           </el-button>
@@ -36,13 +38,14 @@
     <addGlobalAddUser
     v-model="showAddDialog"
     />
+    <SettingsDialog v-model="settingsVisible" />
   </main>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
+// import { ElMessage } from 'element-plus'
+import { Plus} from '@element-plus/icons-vue'
 import YandexWindow from '@/components/Yandex/YandexWindow.vue'
 import RegWindow from '@/components/REG/RegWindow.vue'
 import CloudContactWindow from '@/components/CloudContact/CloudContactWindow.vue'
@@ -50,6 +53,7 @@ import VpnWindow from '@/components/Vpn/OpenVpnWindow.vue'
 import AllUsr from "@/components/Globalusers/AllUsrs.vue";
 import { getMe } from '@/api/Globalusers/users.js'
 import addGlobalAddUser from '../components/Globalusers/components/AddUsers.vue';
+import SettingsDialog from '../components/settings/SettingsDialog.vue'
 
 // Вкладку «Все Пользователи» (реестр с паролями) видят только логины
 // из MEMBERS_ALLOWED_USERS — решает бэкенд через /api/me.
@@ -58,6 +62,7 @@ const canSeeMembers = ref(false)
 const activeName = ref('Yandex')
 const showAddDialog = ref(false)
 const error = ref('')
+const settingsVisible = ref(false)
 
 onMounted(async () => {
   try {

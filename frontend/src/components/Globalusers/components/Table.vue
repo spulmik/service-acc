@@ -24,10 +24,10 @@
 
       
 
-      <el-button @click="settingsVisible = true">Настройки</el-button>
+      <!-- <el-button @click="settingsVisible = true">Настройки</el-button> -->
     </div>
 
-    <SettingsDialog v-model="settingsVisible" />
+    <!-- <SettingsDialog v-model="settingsVisible" /> -->
 
 
     <el-alert
@@ -84,7 +84,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { getMembers } from '@/api/Globalusers/users.js'
-import SettingsDialog from './SettingsDialog.vue'
+// import SettingsDialog from './SettingsDialog.vue'
 
 defineProps({
   title: { type: String, default: 'Управление пользователями' },
@@ -129,7 +129,7 @@ const error = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const showPasswords = ref(false)
-const settingsVisible = ref(false)
+// const settingsVisible = ref(false)
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
