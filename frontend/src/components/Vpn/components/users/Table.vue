@@ -16,9 +16,7 @@
 
       <el-button :loading="loading" @click="load">Обновить список</el-button>
 
-      <el-button :loading="loading" @click="addUsrVpn">
-        <el-icon><Plus /></el-icon>
-      </el-button>
+
     </div>
 
     <el-alert
@@ -80,7 +78,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="Последний вход" min-width="180">
+      <el-table-column label="Последний вход">
         <template #default="{ row }">
           <el-tooltip
             v-if="!isEmptyDate(row.last_login)"
@@ -92,6 +90,19 @@
             </span>
           </el-tooltip>
           <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="" width="60" align="center">
+        <template #default="{ row }">
+          <el-button
+            text
+            circle
+            size="small"
+            class="row-actions"
+            @click="onRowAction(row)"
+          >
+            <el-icon :size="18"><MoreFilled /></el-icon>
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -107,16 +118,14 @@
       />
     </div>
 
-    <VpnAdd v-model="showAddDialog" @created="load" />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Plus, User, Clock } from '@element-plus/icons-vue'
+import { Search, User, Clock, MoreFilled } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/Vpn/users.js'
-import VpnAdd from './addusr.vue'
 import {
   initial,
   avatarColor,
@@ -133,12 +142,13 @@ const search = ref('')
 const tableData = ref([])
 const loading = ref(false)
 const error = ref('')
-const showAddDialog = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-function addUsrVpn() {
-  showAddDialog.value = true
+
+function onRowAction(row) {
+  // TODO: открыть меню действий (редактировать / удалить) для row
+  console.log('row action', row)
 }
 
 const filterTableData = computed(() => {
@@ -188,6 +198,8 @@ async function load() {
 }
 
 onMounted(load)
+
+defineExpose({ load })
 </script>
 
 <style scoped>
