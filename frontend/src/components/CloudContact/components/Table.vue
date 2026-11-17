@@ -33,14 +33,51 @@
       style="width: 100%"
       empty-text="Нет данных"
     >
-      <el-table-column
-        v-for="col in columns"
-        :key="col"
-        :prop="col"
-        :label="col"
-        min-width="160"
-        show-overflow-tooltip
-      />
+      <!-- NAME: аватар + ФИО + логин -->
+      <el-table-column label="Имя" min-width="280">
+        <template #default="{ row }">
+          <div class="user-cell">
+            <div
+              class="avatar"
+              :style="{ background: avatarColor(fullName(row) || row.loginId) }"
+            >
+              {{ initial(fullName(row) || row.loginId) }}
+            </div>
+            <div class="user-meta">
+              <div class="user-name">{{ fullName(row) || '—' }}</div>
+              <div class="user-email">{{ row.loginId }}</div>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="Внутр. номер" min-width="130">
+        <template #default="{ row }">
+          <span v-if="row.extension" class="ext">{{ row.extension }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="Команда" min-width="180">
+        <template #default="{ row }">
+          <el-tag v-if="row.team" type="info" disable-transitions>
+            {{ row.team }}
+          </el-tag>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+
+      <el-table-column label="Статус" min-width="130">
+        <template #default="{ row }">
+          <span class="status">
+            <span
+              class="status-dot"
+              :class="row.disabled ? 'is-blocked' : 'is-active'"
+            ></span>
+            {{ row.disabled ? 'Отключён' : 'Активен' }}
+          </span>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="table-footer">
@@ -61,6 +98,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { getUsers } from '@/api/CloudContact/users.js'
+import { initial, avatarColor } from '@/utils/format.js'
 
 const props = defineProps({
   // Тип вкладки: osn | msp | back — по нему выбирается URL запроса.
@@ -75,10 +113,11 @@ const error = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-// Колонки берём из ключей первой строки — пока структура данных не задана.
-const columns = computed(() =>
-  tableData.value.length ? Object.keys(tableData.value[0]) : [],
-)
+function fullName(row) {
+  return [row.lastName, row.firstName].map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join(' ')
+}
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -88,8 +127,8 @@ const filterTableData = computed(() => {
   }
 
   return tableData.value.filter((item) =>
-    Object.values(item).some((v) =>
-      String(v ?? '').toLowerCase().includes(query),
+    [item.loginId, item.firstName, item.lastName, item.extension, item.team].some(
+      (v) => String(v ?? '').toLowerCase().includes(query),
     ),
   )
 })
@@ -113,7 +152,6 @@ async function load(force = false) {
   try {
     const result = await getUsers(props.type, { refresh: force === true })
 
-    // Поддержим массив и типовые обёртки {users|items|mailboxes}.
     tableData.value = Array.isArray(result)
       ? result
       : result?.users || result?.items || result?.mailboxes || []
@@ -129,9 +167,10 @@ async function load(force = false) {
   }
 }
 
-// Перезагружаем при смене типа и при монтировании.
 watch(() => props.type, load)
 onMounted(load)
+
+defineExpose({ load })
 </script>
 
 <style scoped>
@@ -161,6 +200,76 @@ onMounted(load)
 
 .search-input {
   width: 280px;
+}
+
+.muted {
+  color: var(--el-text-color-secondary);
+}
+
+.ext {
+  font-variant-numeric: tabular-nums;
+}
+
+/* NAME: аватар + ФИО + логин */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-meta {
+  min-width: 0;
+}
+
+.user-name {
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-email {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* STATUS: точка + текст */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-text-color-secondary);
+}
+
+.status-dot.is-active {
+  background: var(--el-color-success);
+}
+
+.status-dot.is-blocked {
+  background: var(--el-color-danger);
 }
 
 .table-alert {

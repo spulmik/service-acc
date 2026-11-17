@@ -3,7 +3,7 @@
     v-model="visible"
     title="Добавить пользователя"
     width="500px"
-    :close-on-click-modal="false"
+    :close-on-click-modal="true"
     :close-on-press-escape="!loading"
     :show-close="!loading"
     @close="resetForm"
@@ -77,13 +77,57 @@
       </el-form-item>
 
       <!-- Поля появляются при выборе соответствующей галочки. -->
-      <el-form-item v-if="isCloud" label="CloudContact" prop="cloudcontact">
-        <el-input
-          v-model="form.cloudcontact"
-          placeholder="Логин в CloudContact"
-          :disabled="loading"
+      <el-form-item v-if="isCloud" label="Тип CloudContact" prop="ccService">
+        <el-radio-group v-model="form.ccService" :disabled="loading">
+          <el-radio value="osn">Основной</el-radio>
+          <el-radio value="msp">МСП</el-radio>
+          <el-radio value="back">БЭК</el-radio>
+        </el-radio-group>
+      </el-form-item>
+
+      <el-form-item v-if="isCloud" label="Группа (team)" prop="ccTeam">
+        <el-select
+          v-model="form.ccTeam"
+          filterable
           clearable
-        />
+          :loading="ccTeamsLoading"
+          :disabled="!form.ccService || loading"
+          :placeholder="form.ccService ? 'Выберите команду' : 'Сначала выберите тип'"
+          style="width: 100%"
+        >
+          <el-option v-for="t in ccTeams" :key="t" :label="t" :value="t" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item v-if="isCloud" label="Роли" prop="ccRoles">
+        <el-select
+          v-model="form.ccRoles"
+          multiple
+          filterable
+          allow-create
+          default-first-option
+          :loading="ccRolesLoading"
+          :disabled="!form.ccService || loading"
+          :placeholder="form.ccService ? 'Выберите роли' : 'Сначала выберите тип'"
+          style="width: 100%"
+        >
+          <el-option v-for="r in ccRoles" :key="r" :label="r" :value="r" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item v-if="isCloud" label="Внутренний номер" prop="ccNumber">
+        <el-input
+          v-model="form.ccNumber"
+          readonly
+          :placeholder="
+            form.ccTeam ? 'Подбирается автоматически…' : 'Сначала выберите команду'
+          "
+        >
+          <template #suffix>
+            <el-icon v-if="ccNumberLoading" class="is-loading"><Loading /></el-icon>
+          </template>
+        </el-input>
+        <span class="form-hint">Первый свободный номер из диапазона группы.</span>
       </el-form-item>
 
       <el-form-item v-if="isVpn" label="Группы NetBird" prop="vpn">
@@ -186,12 +230,18 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { MagicStick } from '@element-plus/icons-vue'
+import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { createUser as createRegUser } from '@/api/Reg/users.js'
 import { createUser as createYandexUser } from '@/api/Yandex/users.js'
 import { generatePassword } from '@/api/password.js'
 import { saveMember } from '@/api/Globalusers/users.js'
 import { getStoredGroups, addUser as addVpnUser } from '@/api/Vpn/users.js'
+import {
+  getTeams as getCcTeams,
+  getFreeNumber as getCcFreeNumber,
+  createUser as createCloudContactUser,
+} from '@/api/CloudContact/users.js'
+import { getRolesForService as getCcRolesForService } from '@/api/CloudContact/roles.js'
 
 const props = defineProps({
   modelValue: {
@@ -216,7 +266,12 @@ const form = ref({
   position: '',
   phone: '',
   services: [],
-  cloudcontact: '',
+  // CloudContact
+  ccService: '', // osn | msp | back
+  ccTeam: '',
+  ccRoles: [],
+  ccNumber: '',
+  // NetBird
   vpn: [],
   vpnMode: 'invite',
 })
@@ -226,6 +281,71 @@ const isYandex = computed(() => form.value.domain === 'energy-team.ru')
 // services — массив выбранных галочек, поэтому проверяем includes.
 const isCloud = computed(() => form.value.services.includes('cloudcontact'))
 const isVpn = computed(() => form.value.services.includes('vpn'))
+
+// CloudContact: команды/роли сервиса и подбор номера (логика как в CloudContactAdd).
+const ccTeams = ref([])
+const ccTeamsLoading = ref(false)
+const ccRoles = ref([])
+const ccRolesLoading = ref(false)
+const ccNumberLoading = ref(false)
+
+// Смена типа CloudContact → подгружаем команды и роли этого сервиса.
+watch(
+  () => form.value.ccService,
+  async (type) => {
+    form.value.ccTeam = ''
+    form.value.ccRoles = []
+    ccTeams.value = []
+    ccRoles.value = []
+
+    if (!type) return
+
+    ccTeamsLoading.value = true
+    ccRolesLoading.value = true
+
+    try {
+      const [t, r] = await Promise.allSettled([
+        getCcTeams(type),
+        getCcRolesForService(type),
+      ])
+
+      ccTeams.value = t.status === 'fulfilled' ? t.value : []
+      ccRoles.value = r.status === 'fulfilled' ? r.value : []
+
+      if (t.status === 'rejected') {
+        ElMessage.error(
+          t.reason instanceof Error ? t.reason.message : 'Не удалось загрузить команды',
+        )
+      }
+    } finally {
+      ccTeamsLoading.value = false
+      ccRolesLoading.value = false
+    }
+  },
+)
+
+// Выбор команды → первый свободный внутренний номер.
+watch(
+  () => form.value.ccTeam,
+  async (team) => {
+    form.value.ccNumber = ''
+
+    if (!team || !form.value.ccService) return
+
+    ccNumberLoading.value = true
+
+    try {
+      const res = await getCcFreeNumber(form.value.ccService, team)
+      form.value.ccNumber = String(res?.number ?? '')
+    } catch (error) {
+      ElMessage.warning(
+        error instanceof Error ? error.message : 'Не удалось подобрать номер',
+      )
+    } finally {
+      ccNumberLoading.value = false
+    }
+  },
+)
 
 // Доступные группы NetBird — грузим один раз, когда впервые отметили VPN.
 const vpnGroups = ref([])
@@ -281,6 +401,16 @@ const rules = computed(() => ({
         ],
       }
     : {}),
+  ...(isCloud.value
+    ? {
+        ccService: [
+          { required: true, message: 'Выберите тип CloudContact', trigger: 'change' },
+        ],
+        ccTeam: [
+          { required: true, message: 'Выберите команду', trigger: 'change' },
+        ],
+      }
+    : {}),
 }))
 
 watch(
@@ -315,10 +445,15 @@ function resetForm() {
     position: '',
     phone: '',
     services: [],
-    cloudcontact: '',
+    ccService: '',
+    ccTeam: '',
+    ccRoles: [],
+    ccNumber: '',
     vpn: [],
     vpnMode: 'invite',
   }
+  ccTeams.value = []
+  ccRoles.value = []
 }
 
 async function genPassword() {
@@ -410,6 +545,33 @@ async function submitForm() {
       }
     }
 
+    // CloudContact: заводим пользователя в выбранном сервисе. Ошибка внешнего
+    // сервиса не рушит создание УЗ — показываем предупреждением.
+    if (isCloud.value) {
+      if (!form.value.ccNumber) {
+        ElMessage.warning('CloudContact: не подобран внутренний номер — пропущено')
+      } else {
+        try {
+          await createCloudContactUser(form.value.ccService, {
+            loginId: nickname,
+            password: form.value.password,
+            email,
+            firstName: form.value.firstName.trim(),
+            lastName: form.value.lastName.trim(),
+            team: form.value.ccTeam,
+            extension: form.value.ccNumber,
+            roles: form.value.ccRoles,
+          })
+        } catch (ccError) {
+          ElMessage.warning(
+            `CloudContact: создание не выполнено — ${
+              ccError instanceof Error ? ccError.message : 'ошибка'
+            }`,
+          )
+        }
+      }
+    }
+
     try {
       await saveMember({
         fio,
@@ -420,7 +582,7 @@ async function submitForm() {
         position: form.value.position.trim(),
         yandex: isYandex.value ? email : '',
         reg: isYandex.value ? '' : email,
-        cloudcontact: isCloud.value ? form.value.cloudcontact.trim() : '',
+        cloudcontact: isCloud.value ? email : '',
         vpngroups: vpnGroupNames,
       })
     } catch (saveError) {
