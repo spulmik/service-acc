@@ -11,7 +11,11 @@ import {
   deleteRegUser,
 } from "./reg.js";
 
-import { getCloudContactUsers, getCloudContactTeams } from "./cloudcontact.js";
+import {
+  getCloudContactUsers,
+  getCloudContactTeams,
+  getUsedExtensions,
+} from "./cloudcontact.js";
 
 import {
   getVpnUsers,
@@ -29,7 +33,11 @@ import { generatePassword } from "./functions.js";
 import { listMembersDecrypted, upsertMember } from "../server/members.js";
 
 import { listVpnGroups, syncVpnGroups } from "../server/groups.js";
-import { listPhonePlan, assignTeamGroup } from "../server/phonePlan.js";
+import {
+  listPhonePlan,
+  assignTeamGroup,
+  getRangeForTeam,
+} from "../server/phonePlan.js";
 import {
   listPhoneGroups,
   createPhoneGroup,
@@ -468,6 +476,84 @@ async function handleRequest(request, env, ctx) {
                   : "Не удалось удалить почтовый ящик",
             },
             400,
+          );
+        }
+      }
+
+      // 5.6b. CloudContact — первый свободный внутренний номер для команды.
+      // team → группа → диапазон (phone_groups), минус занятые extension.
+      // Должен стоять ПЕРЕД роутом пользователей.
+      if (
+        pathname.startsWith("/api/cloudcontact/") &&
+        pathname.endsWith("/freenumber") &&
+        request.method === "GET"
+      ) {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const type = pathname.slice("/api/cloudcontact/".length).split("/")[0];
+        const team = url.searchParams.get("team") || "";
+
+        try {
+          const range = await getRangeForTeam(team);
+
+          if (!range) {
+            return jsonAuthResponse(
+              { error: "Команда не привязана к группе — добавьте её в группу" },
+              409,
+            );
+          }
+
+          if (range.firstNumber == null || range.lastNumber == null) {
+            return jsonAuthResponse(
+              { error: `У группы «${range.group}» не задан диапазон номеров` },
+              409,
+            );
+          }
+
+          const used = new Set(
+            (await getUsedExtensions(env, type)).map((e) => Number(e)),
+          );
+
+          let free = null;
+          for (let n = range.firstNumber; n <= range.lastNumber; n++) {
+            if (!used.has(n)) {
+              free = n;
+              break;
+            }
+          }
+
+          if (free == null) {
+            return jsonAuthResponse(
+              {
+                error: `Нет свободных номеров в диапазоне ${range.firstNumber}–${range.lastNumber}`,
+              },
+              409,
+            );
+          }
+
+          return jsonAuthResponse({
+            number: free,
+            group: range.group,
+            range: { first: range.firstNumber, last: range.lastNumber },
+          });
+        } catch (error) {
+          console.error("[API CLOUDCONTACT FREENUMBER] Ошибка:", {
+            type,
+            team,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось подобрать свободный номер",
+            },
+            502,
           );
         }
       }

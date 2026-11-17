@@ -13,6 +13,29 @@ const SELECT_COLS = `
   cc_back    AS "back"
 `;
 
+// Диапазон номеров группы, к которой принадлежит команда.
+// team → phone_plan.group_name → phone_groups.first_number/last_number.
+export async function getRangeForTeam(team) {
+  const t = String(team || "").trim();
+
+  if (!t) {
+    return null;
+  }
+
+  const { rows } = await query(
+    `SELECT g.name AS "group",
+            g.first_number AS "firstNumber",
+            g.last_number  AS "lastNumber"
+       FROM phone_plan p
+       JOIN phone_groups g ON g.name = p.group_name
+      WHERE p.team = $1
+      LIMIT 1`,
+    [t],
+  );
+
+  return rows[0] || null;
+}
+
 // Список строк (команд) номерного плана.
 export async function listPhonePlan() {
   const { rows } = await query(

@@ -3,5 +3,5 @@
 </template>
 
 <script setup>
-import ContactTable from '../Table.vue'
+import ContactTable from '../components/Table.vue'
 </script>

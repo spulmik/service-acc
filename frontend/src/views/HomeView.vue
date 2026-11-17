@@ -6,10 +6,12 @@
         <div class="card-header">
           <strong>Реестр управления УЗ</strong>
 
-          <el-button @click="settingsVisible = true">Настройки</el-button>
-          <el-button @click="GlobalAddUser">
-            <el-icon><Plus /></el-icon>
-          </el-button>
+          <div class="header-actions">
+            <el-button @click="settingsVisible = true">Настройки</el-button>
+            <el-button @click="GlobalAddUser">
+              <el-icon><Plus /></el-icon>
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -103,6 +105,12 @@ function GlobalAddUser() {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .tabs {

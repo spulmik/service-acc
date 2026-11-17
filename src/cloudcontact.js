@@ -332,6 +332,32 @@ export async function getCloudContactTeams(env, type) {
     .filter(Boolean);
 }
 
+// Занятые внутренние номера (extension) тенанта. Лёгкий запрос — только
+// краткий список /phone/user (без детальных /user/:username).
+export async function getUsedExtensions(env, type) {
+  const tenant = getTenant(type);
+
+  let token = await getCloudContactToken(env, type);
+
+  let list;
+  try {
+    list = await ccGet(tenant.host, "/phone/user", token);
+  } catch (error) {
+    if (error.status === 401) {
+      token = await getCloudContactToken(env, type, true);
+      list = await ccGet(tenant.host, "/phone/user", token);
+    } else {
+      throw error;
+    }
+  }
+
+  const items = Array.isArray(list) ? list : list?.items || list?.users || [];
+
+  return items
+    .map((u) => String(u?.extension ?? "").trim())
+    .filter(Boolean);
+}
+
 // 3. Прогрев кэша: заранее собираем список по всем тенантам, чтобы даже самый
 //    первый заход пользователя был мгновенным. Вызывается при старте сервера и
 //    по расписанию (см. server.js). Ошибка по одному тенанту (например, не

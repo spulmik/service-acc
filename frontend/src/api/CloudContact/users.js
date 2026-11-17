@@ -59,6 +59,28 @@ export async function getTeams(type) {
   return data?.teams || [];
 }
 
+// Первый свободный внутренний номер (extension) для команды в сервисе.
+// Диапазон берётся из группы команды в БД, занятые — из CloudContact.
+export async function getFreeNumber(type, team) {
+  const url = `${baseUrl(type)}/freenumber?team=${encodeURIComponent(team)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Не удалось подобрать номер: HTTP ${response.status}`,
+    );
+  }
+
+  return data; // { number, group, range: { first, last } }
+}
+
 export async function createUser(type, userData) {
   const response = await fetch(baseUrl(type), {
     method: "POST",
