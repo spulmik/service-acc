@@ -332,6 +332,90 @@ export async function getCloudContactTeams(env, type) {
     .filter(Boolean);
 }
 
+// Создание пользователя в BrightPattern. POST /configapi/v2/user.
+// Пароль задаём сразу → changePassword:false. skills не трогаем (ставятся сами).
+export async function createCloudContactUser(env, type, data = {}) {
+  const tenant = getTenant(type);
+
+  const body = {
+    loginId: String(data.loginId || "").trim(),
+    password: String(data.password || ""),
+    changePassword: false,
+    firstName: String(data.firstName || "").trim(),
+    lastName: String(data.lastName || "").trim(),
+    email: String(data.email || ""),
+  };
+
+  if (!body.loginId) throw new Error("Укажите логин");
+  if (!body.password) throw new Error("Укажите пароль");
+
+  if (data.team) body.team = String(data.team).trim();
+
+  if (data.extension != null && data.extension !== "") {
+    body.extension = String(data.extension).trim();
+  }
+
+  const roles = Array.isArray(data.roles)
+    ? data.roles.filter(Boolean)
+    : data.roles
+      ? [data.roles]
+      : [];
+
+  if (roles.length) body.roles = roles;
+
+  const url = `https://${tenant.host}/configapi/v2/user`;
+  const doPost = (tok) =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tok}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000),
+    });
+
+  let token = await getCloudContactToken(env, type);
+  let response = await doPost(token);
+
+  if (response.status === 401) {
+    token = await getCloudContactToken(env, type, true);
+    response = await doPost(token);
+  }
+
+  // Читаем как текст — тело ошибки BrightPattern может быть не JSON.
+  const rawText = await response.text().catch(() => "");
+  let result = null;
+  try {
+    result = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    // не JSON — оставим как текст
+  }
+
+  if (!response.ok) {
+    // Логируем, ЧТО отправили (пароль маскируем), чтобы видеть причину 400.
+    console.error("[CloudContact] create user отклонён", {
+      type,
+      status: response.status,
+      sent: { ...body, password: "***" },
+      response: rawText ? rawText.slice(0, 500) : "",
+    });
+
+    throw new Error(
+      `CloudContact create user HTTP ${response.status}${rawText ? `: ${rawText.slice(0, 300)}` : ""}`,
+    );
+  }
+
+  // Сбрасываем кэш списка пользователей тенанта, чтобы новый сразу подтянулся.
+  const store = getStore(env);
+  if (store) {
+    await store.delete(`cc:users:${type}`).catch(() => {});
+  }
+
+  return result;
+}
+
 // Занятые внутренние номера (extension) тенанта. Лёгкий запрос — только
 // краткий список /phone/user (без детальных /user/:username).
 export async function getUsedExtensions(env, type) {

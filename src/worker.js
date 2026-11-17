@@ -15,7 +15,15 @@ import {
   getCloudContactUsers,
   getCloudContactTeams,
   getUsedExtensions,
+  createCloudContactUser,
 } from "./cloudcontact.js";
+import {
+  listRoles as listCcRoles,
+  listRoleNamesForService,
+  createRole as createCcRole,
+  updateRole as updateCcRole,
+  deleteRole as deleteCcRole,
+} from "../server/cloudContactRoles.js";
 
 import {
   getVpnUsers,
@@ -588,6 +596,56 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось получить команды CloudContact",
+            },
+            502,
+          );
+        }
+      }
+
+      // 5.6d. CloudContact — создание пользователя в тенанте.
+      if (
+        pathname.startsWith("/api/cloudcontact/") &&
+        request.method === "POST"
+      ) {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const type = pathname.slice("/api/cloudcontact/".length).split("/")[0];
+
+        try {
+          const body = await request.json();
+          const user = await createCloudContactUser(env, type, {
+            loginId: body.loginId || body.nickname,
+            password: body.password,
+            email: body.email,
+            firstName: body.firstName,
+            lastName: body.lastName,
+            team: body.team,
+            extension: body.extension || body.into_phone,
+            roles: body.roles,
+          });
+
+          console.log("[API CLOUDCONTACT CREATE] Пользователь создан:", {
+            type,
+            loginId: body.loginId || body.nickname,
+            by: session.username,
+          });
+
+          return jsonAuthResponse({ user });
+        } catch (error) {
+          console.error("[API CLOUDCONTACT CREATE] Ошибка:", {
+            type,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось создать пользователя CloudContact",
             },
             502,
           );
@@ -1240,6 +1298,124 @@ async function handleRequest(request, env, ctx) {
               { error: "Не удалось удалить группу" },
               500,
             );
+          }
+        }
+      }
+
+      // 5.10k. Справочник ролей CloudContact — список / создание.
+      // ?service=osn|msp|back → только имена ролей сервиса (для формы добавления).
+      // без параметра → полный список с флагами (для модалки управления).
+      if (pathname === "/api/cloudcontact-roles" && request.method === "GET") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const service = url.searchParams.get("service");
+
+        try {
+          if (service) {
+            const roles = await listRoleNamesForService(service);
+            return jsonAuthResponse({ roles, total: roles.length, service });
+          }
+
+          const roles = await listCcRoles();
+          return jsonAuthResponse({ roles, total: roles.length });
+        } catch (error) {
+          console.error("[API CC ROLES] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse({ error: "Не удалось получить роли" }, 500);
+        }
+      }
+
+      if (pathname === "/api/cloudcontact-roles" && request.method === "POST") {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        try {
+          const body = await request.json();
+          const role = await createCcRole(body);
+
+          return jsonAuthResponse({ role });
+        } catch (error) {
+          console.error("[API CC ROLES CREATE] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось создать роль",
+            },
+            400,
+          );
+        }
+      }
+
+      // 5.10l. Справочник ролей — обновление / удаление по id.
+      if (pathname.startsWith("/api/cloudcontact-roles/")) {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const id = Number(pathname.slice("/api/cloudcontact-roles/".length));
+
+        if (!Number.isInteger(id) || id <= 0) {
+          return jsonAuthResponse({ error: "Некорректный id" }, 400);
+        }
+
+        if (request.method === "PUT") {
+          try {
+            const body = await request.json();
+            const role = await updateCcRole(id, body);
+
+            if (!role) {
+              return jsonAuthResponse({ error: "Роль не найдена" }, 404);
+            }
+
+            return jsonAuthResponse({ role });
+          } catch (error) {
+            console.error("[API CC ROLES UPDATE] Ошибка:", {
+              id,
+              message:
+                error instanceof Error ? error.message : "Unknown error",
+            });
+
+            return jsonAuthResponse(
+              {
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Не удалось обновить роль",
+              },
+              400,
+            );
+          }
+        }
+
+        if (request.method === "DELETE") {
+          try {
+            const ok = await deleteCcRole(id);
+
+            if (!ok) {
+              return jsonAuthResponse({ error: "Роль не найдена" }, 404);
+            }
+
+            return jsonAuthResponse({ ok: true });
+          } catch (error) {
+            console.error("[API CC ROLES DELETE] Ошибка:", {
+              id,
+              message:
+                error instanceof Error ? error.message : "Unknown error",
+            });
+
+            return jsonAuthResponse({ error: "Не удалось удалить роль" }, 500);
           }
         }
       }

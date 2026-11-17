@@ -20,9 +20,18 @@
       </div>
 
       <div class="tab-content">
-        <CloudContactWindow v-if="activeName === 'CloudContact'" />
-        <CloudContactWindowMsp v-else-if="activeName === 'CloudContactMsp'" />
-        <CloudContactWindowBack v-else-if="activeName === 'CloudContactBack'" />
+        <CloudContactWindow
+          v-if="activeName === 'CloudContact'"
+          :key="reloadKey"
+        />
+        <CloudContactWindowMsp
+          v-else-if="activeName === 'CloudContactMsp'"
+          :key="reloadKey"
+        />
+        <CloudContactWindowBack
+          v-else-if="activeName === 'CloudContactBack'"
+          :key="reloadKey"
+        />
       </div>
     </el-card>
 
@@ -41,11 +50,17 @@ import CloudContactAdd  from "@/components/CloudContact/components/CloudContactA
 
 const showAddDialog = ref(false)
 const activeName = ref('CloudContact')
+const reloadKey = ref(0)
 // const error = ref('')
 
 
 function addUsrCloudContact() {
   showAddDialog.value = true
+}
+
+// После создания пользователя — перемонтируем активную таблицу (обновит список).
+function onCreated() {
+  reloadKey.value++
 }
 
 

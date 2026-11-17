@@ -49,9 +49,14 @@
         <el-form-item label="Номерной план телефонии">
           <el-button @click="phoneplanemodal = true"><el-icon><Edit /></el-icon></el-button>
         </el-form-item>
+
+        <el-form-item label="Роли CloudContact">
+          <el-button @click="ccRolesModal = true"><el-icon><Edit /></el-icon></el-button>
+        </el-form-item>
       </el-form>
 
       <PhoneModalDialog v-model="phoneplanemodal" />
+      <CloudContactRolesModal v-model="ccRolesModal" />
 
       <div class="settings-footer">
         <el-button @click="visible = false">Отмена</el-button>
@@ -69,6 +74,7 @@ import { ElMessage } from 'element-plus'
 import { syncGroups } from '@/api/Vpn/users.js'
 import { Edit } from '@element-plus/icons-vue'
 import PhoneModalDialog from './PhoneModalSettins.vue'
+import CloudContactRolesModal from './CloudContactRolesModal.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -80,6 +86,7 @@ const visible = ref(props.modelValue)
 const syncing = ref(false)
 const saving = ref(false)
 const phoneplanemodal = ref(false)
+const ccRolesModal = ref(false)
 
 // Значения формы (пока пусто — поля добавишь по мере настроек).
 const form = reactive({

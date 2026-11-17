@@ -37,6 +37,49 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="Роли" prop="roles">
+        <el-select
+          v-model="form.roles"
+          multiple
+          filterable
+          allow-create
+          default-first-option
+          :loading="rolesLoading"
+          :disabled="!form.service || loading"
+          :placeholder="form.service ? 'Выберите роли' : 'Сначала выберите тип'"
+          style="width: 100%"
+        >
+          <el-option v-for="r in roles" :key="r" :label="r" :value="r" />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="Фамилия" prop="lastName">
+        <el-input
+          v-model="form.lastName"
+          placeholder="Иванов"
+          :disabled="loading"
+          clearable
+        />
+      </el-form-item>
+
+      <el-form-item label="Имя" prop="firstName">
+        <el-input
+          v-model="form.firstName"
+          placeholder="Иван"
+          :disabled="loading"
+          clearable
+        />
+      </el-form-item>
+
+      <el-form-item label="Отчество" prop="middleName">
+        <el-input
+          v-model="form.middleName"
+          placeholder="Иванович (опционально)"
+          :disabled="loading"
+          clearable
+        />
+      </el-form-item>
+
       <el-form-item label="Логин" prop="nickname">
         <el-input
           v-model="form.nickname"
@@ -65,6 +108,15 @@
             </el-icon>
           </template>
         </el-input>
+      </el-form-item>
+      <el-form-item label="Почта" prop="email">
+        <el-input
+          v-model="form.email"
+          type="email"
+          placeholder="ivanov@energy-team.ru"
+          :disabled="loading"
+          clearable
+        />
       </el-form-item>
 
       <el-form-item label="Должность" prop="position">
@@ -108,7 +160,12 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { generatePassword } from '@/api/password.js'
-import { getTeams, getFreeNumber } from '@/api/CloudContact/users.js'
+import {
+  getTeams,
+  getFreeNumber,
+  createUser,
+} from '@/api/CloudContact/users.js'
+import { getRolesForService } from '@/api/CloudContact/roles.js'
 
 const props = defineProps({
   modelValue: {
@@ -125,13 +182,20 @@ const formRef = ref(null)
 
 const teams = ref([])
 const teamsLoading = ref(false)
+const roles = ref([])
+const rolesLoading = ref(false)
 const numberLoading = ref(false)
 
 const form = ref({
   service: '', // osn | msp | back
   team: '',
+  roles: [],
+  lastName: '',
+  firstName: '',
+  middleName: '',
   nickname: '',
   password: '',
+  email: '',
   position: '',
   into_phone: '',
 })
@@ -143,6 +207,12 @@ const rules = {
   team: [
     { required: true, message: 'Выберите команду', trigger: 'change' },
   ],
+  lastName: [
+    { required: true, message: 'Укажите фамилию', trigger: 'blur' },
+  ],
+  firstName: [
+    { required: true, message: 'Укажите имя', trigger: 'blur' },
+  ],
   nickname: [
     { required: true, message: 'Укажите логин', trigger: 'blur' },
     {
@@ -150,6 +220,10 @@ const rules = {
       message: '3-30 символов: латиница, цифры, . - _',
       trigger: 'blur',
     },
+  ],
+  email: [
+    { required: true, message: 'Укажите email', trigger: 'blur' },
+    { type: 'email', message: 'Некорректный email', trigger: ['blur', 'change'] },
   ],
   password: [
     { required: true, message: 'Укажите пароль', trigger: 'blur' },
@@ -166,25 +240,39 @@ watch(
 
 watch(visible, (v) => emit('update:modelValue', v))
 
-// Смена типа CloudContact → подгружаем команды именно этого сервиса.
+// Смена типа CloudContact → подгружаем команды и роли именно этого сервиса.
 watch(
   () => form.value.service,
   async (type) => {
     form.value.team = ''
+    form.value.roles = []
     teams.value = []
+    roles.value = []
 
     if (!type) return
 
     teamsLoading.value = true
+    rolesLoading.value = true
 
     try {
-      teams.value = await getTeams(type)
-    } catch (error) {
-      ElMessage.error(
-        error instanceof Error ? error.message : 'Не удалось загрузить команды',
-      )
+      const [teamsRes, rolesRes] = await Promise.allSettled([
+        getTeams(type),
+        getRolesForService(type),
+      ])
+
+      teams.value = teamsRes.status === 'fulfilled' ? teamsRes.value : []
+      roles.value = rolesRes.status === 'fulfilled' ? rolesRes.value : []
+
+      if (teamsRes.status === 'rejected') {
+        ElMessage.error(
+          teamsRes.reason instanceof Error
+            ? teamsRes.reason.message
+            : 'Не удалось загрузить команды',
+        )
+      }
     } finally {
       teamsLoading.value = false
+      rolesLoading.value = false
     }
   },
 )
@@ -217,12 +305,18 @@ function resetForm() {
   form.value = {
     service: '',
     team: '',
+    roles: [],
+    lastName: '',
+    firstName: '',
+    middleName: '',
     nickname: '',
     password: '',
+    email: '',
     position: '',
     into_phone: '',
   }
   teams.value = []
+  roles.value = []
 }
 
 async function genPassword() {
@@ -244,9 +338,35 @@ async function submitForm() {
     return
   }
 
-  // TODO: подключить создание пользователя CloudContact (бэкенд).
-  ElMessage.success('Форма заполнена (сохранение пока не подключено)')
-  visible.value = false
+  if (!form.value.into_phone) {
+    ElMessage.warning('Не удалось подобрать внутренний номер — проверьте группу')
+    return
+  }
+
+  loading.value = true
+
+  try {
+    const result = await createUser(form.value.service, {
+      loginId: form.value.nickname.trim(),
+      password: form.value.password,
+      email: form.value.email,
+      firstName: form.value.firstName.trim(),
+      lastName: form.value.lastName.trim(),
+      team: form.value.team,
+      extension: form.value.into_phone,
+      roles: form.value.roles,
+    })
+
+    ElMessage.success(`Пользователь «${form.value.nickname}» создан`)
+    emit('created', result?.user)
+    visible.value = false
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error ? error.message : 'Не удалось создать пользователя',
+    )
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

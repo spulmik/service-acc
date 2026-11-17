@@ -73,3 +73,19 @@ CREATE TABLE IF NOT EXISTS phone_groups (
 -- Если таблица уже создана без диапазона — добавить:
 ALTER TABLE phone_groups ADD COLUMN IF NOT EXISTS first_number INTEGER;
 ALTER TABLE phone_groups ADD COLUMN IF NOT EXISTS last_number INTEGER;
+
+-- Роли CloudContact. У BrightPattern нет API-списка ролей, поэтому ведём свой
+-- справочник. Флаги определяют, к какому сервису относится роль (osn/msp/back).
+CREATE TABLE IF NOT EXISTS cloudcontact_roles (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  cc_osn      BOOLEAN DEFAULT false,
+  cc_msp      BOOLEAN DEFAULT false,
+  cc_back     BOOLEAN DEFAULT false,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- Имя роли уникально (нужно для upsert и сид-файла).
+CREATE UNIQUE INDEX IF NOT EXISTS cloudcontact_roles_name_idx
+  ON cloudcontact_roles (name);
