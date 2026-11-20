@@ -416,6 +416,58 @@ export async function createCloudContactUser(env, type, data = {}) {
   return result;
 }
 
+// Удаление пользователя BrightPattern. DELETE /configapi/v2/user/{loginId}.
+export async function deleteCloudContactUser(env, type, loginId) {
+  const tenant = getTenant(type);
+  const id = String(loginId || "").trim();
+
+  if (!id) {
+    throw new Error("Укажите логин пользователя");
+  }
+
+  const url = `https://${tenant.host}/configapi/v2/user/${encodeURIComponent(id)}`;
+  const doDelete = (tok) =>
+    fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${tok}`,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+
+  let token = await getCloudContactToken(env, type);
+  let response = await doDelete(token);
+
+  if (response.status === 401) {
+    token = await getCloudContactToken(env, type, true);
+    response = await doDelete(token);
+  }
+
+  const rawText = await response.text().catch(() => "");
+
+  if (!response.ok) {
+    console.error("[CloudContact] delete user отклонён", {
+      type,
+      loginId: id,
+      status: response.status,
+      response: rawText ? rawText.slice(0, 500) : "",
+    });
+
+    throw new Error(
+      `CloudContact delete user HTTP ${response.status}${rawText ? `: ${rawText.slice(0, 300)}` : ""}`,
+    );
+  }
+
+  // Сбрасываем кэш списка — удалённый должен пропасть.
+  const store = getStore(env);
+  if (store) {
+    await store.delete(`cc:users:${type}`).catch(() => {});
+  }
+
+  return { ok: true };
+}
+
 // Занятые внутренние номера (extension) тенанта. Лёгкий запрос — только
 // краткий список /phone/user (без детальных /user/:username).
 export async function getUsedExtensions(env, type) {

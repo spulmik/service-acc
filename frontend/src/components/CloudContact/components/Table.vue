@@ -78,6 +78,34 @@
           </span>
         </template>
       </el-table-column>
+      <el-table-column label="" width="60" align="center">
+        <template #default="{ row }">
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            popper-class="vpn-row-menu"
+            @command="(cmd) => onCommand(cmd, row)"
+          >
+            <el-button
+              text
+              circle
+              size="small"
+              class="row-actions"
+              @click.stop
+            >
+              <el-icon :size="18"><MoreFilled /></el-icon>
+            </el-button>
+
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="delete" class="is-danger">
+                  <el-icon><Delete /></el-icon>Удалить
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="table-footer">
@@ -95,9 +123,9 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
-import { getUsers } from '@/api/CloudContact/users.js'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, MoreFilled, Delete } from '@element-plus/icons-vue'
+import { getUsers, deleteUser } from '@/api/CloudContact/users.js'
 import { initial, avatarColor } from '@/utils/format.js'
 
 const props = defineProps({
@@ -118,6 +146,54 @@ function fullName(row) {
     .filter(Boolean)
     .join(' ')
 }
+
+
+
+function onCommand(command, row) {
+  if (command === 'delete') onDelete(row)
+}
+
+async function onDelete(row) {
+  if (!row.loginId) {
+    ElMessage.error('У пользователя нет логина')
+    return
+  }
+
+  const label = fullName(row) || row.loginId
+
+  try {
+    await ElMessageBox.confirm(
+      `Удалить пользователя «${label}» (${row.loginId})? Действие необратимо.`,
+      'Удаление пользователя',
+      {
+        type: 'warning',
+        confirmButtonText: 'Удалить',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    // Пользователь отменил удаление.
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await deleteUser(props.type, row.loginId)
+    ElMessage.success(`Пользователь «${label}» удалён`)
+    await load(true)
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось удалить пользователя',
+    )
+  } finally {
+    loading.value = false
+  }
+}
+
+
+
 
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -281,5 +357,20 @@ defineExpose({ load })
   justify-content: flex-end;
   padding-top: 12px;
   margin-top: 16px;
+}
+</style>
+
+<!-- Меню действий строки телепортируется в body — стили не scoped. -->
+<style>
+.vpn-row-menu .el-dropdown-menu__item {
+  gap: 8px;
+}
+
+.vpn-row-menu .el-dropdown-menu__item.is-danger {
+  color: var(--el-color-danger);
+}
+
+.vpn-row-menu .el-dropdown-menu__item.is-danger:hover {
+  background-color: var(--el-color-danger-light-9);
 }
 </style>
