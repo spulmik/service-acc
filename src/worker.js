@@ -40,7 +40,12 @@ import {
 
 import { generatePassword } from "./functions.js";
 
-import { listMembersDecrypted, upsertMember } from "../server/members.js";
+import {
+  listMembersDecrypted,
+  upsertMember,
+  setServiceAccount,
+  clearServiceAccount,
+} from "../server/members.js";
 
 import { listVpnGroups, syncVpnGroups } from "../server/groups.js";
 import {
@@ -65,6 +70,26 @@ import {
   getAuthenticatedSession,
   jsonAuthResponse,
 } from "./auth.js";
+
+// Маппинг типа CloudContact (osn/msp/back) → колонка members.
+const CC_TYPE_TO_COLUMN = {
+  osn: "cloudcontact",
+  msp: "cloudcontact_msp",
+  back: "cloudcontact_back",
+};
+
+function ccColumn(type) {
+  const col = CC_TYPE_TO_COLUMN[type];
+
+  if (!col) {
+    throw new Error(`Неизвестный тип CloudContact: ${type}`);
+  }
+
+  return col;
+}
+
+// Домен Яндекс 360 — для сбора полного email при синхронизации в members.
+const YANDEX_DOMAIN = "energy-team.ru";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -265,6 +290,28 @@ async function handleRequest(request, env, ctx) {
         try {
           const result = await deleteYandexUser(env, userId);
 
+          const yandexEmail = String(
+            url.searchParams.get("email") || "",
+          )
+            .trim()
+            .toLowerCase();
+
+          if (yandexEmail) {
+            try {
+              await clearServiceAccount({
+                service: "yandex",
+                identifier: yandexEmail,
+              });
+            } catch (syncError) {
+              console.warn("[SYNC members] yandex clear:", {
+                message:
+                  syncError instanceof Error
+                    ? syncError.message
+                    : String(syncError),
+              });
+            }
+          }
+
           console.log("[API YANDEX DELETE] Пользователь удалён:", {
             userId,
             username: session.username,
@@ -296,6 +343,49 @@ async function handleRequest(request, env, ctx) {
           const body = await request.json();
 
           const result = await createYandexUser(env, body);
+
+          try {
+            const nickname = String(body.nickname || "")
+              .trim()
+              .toLowerCase();
+            const fio = [body.name?.last, body.name?.first, body.name?.middle]
+              .map((part) => String(part || "").trim())
+              .filter(Boolean)
+              .join(" ");
+
+            await setServiceAccount({
+              service: "yandex",
+              username: nickname,
+              value: `${nickname}@${YANDEX_DOMAIN}`,
+              fio,
+              email: `${nickname}@${YANDEX_DOMAIN}`,
+            });
+
+            // Пароль фиксируем в members (зашифрованно).
+            if (body.password) {
+              try {
+                await upsertMember({
+                  username: nickname,
+                  fio,
+                  password: body.password,
+                });
+              } catch (pwdSyncError) {
+                console.warn("[SYNC members] yandex password:", {
+                  message:
+                    pwdSyncError instanceof Error
+                      ? pwdSyncError.message
+                      : String(pwdSyncError),
+                });
+              }
+            }
+          } catch (syncError) {
+            console.warn("[SYNC members] yandex set:", {
+              message:
+                syncError instanceof Error
+                  ? syncError.message
+                  : String(syncError),
+            });
+          }
 
           console.log("[API YANDEX CREATE] Пользователь создан:", {
             nickname: body.nickname,
@@ -425,6 +515,45 @@ async function handleRequest(request, env, ctx) {
             domain: body.domain || "energy-team.club",
           });
 
+          try {
+            const regUsername = String(result.username || "")
+              .trim()
+              .toLowerCase();
+
+            await setServiceAccount({
+              service: "reg",
+              username: regUsername,
+              value: result.email,
+              fio: regUsername,
+              email: result.email,
+            });
+
+            // Пароль фиксируем в members (зашифрованно).
+            if (body.password) {
+              try {
+                await upsertMember({
+                  username: regUsername,
+                  fio: regUsername,
+                  password: body.password,
+                });
+              } catch (pwdSyncError) {
+                console.warn("[SYNC members] reg password:", {
+                  message:
+                    pwdSyncError instanceof Error
+                      ? pwdSyncError.message
+                      : String(pwdSyncError),
+                });
+              }
+            }
+          } catch (syncError) {
+            console.warn("[SYNC members] reg set:", {
+              message:
+                syncError instanceof Error
+                  ? syncError.message
+                  : String(syncError),
+            });
+          }
+
           console.log("[API REG CREATE] Ящик создан:", {
             email: result.email,
             username: session.username,
@@ -462,6 +591,20 @@ async function handleRequest(request, env, ctx) {
 
         try {
           const result = await deleteRegUser(env, email);
+
+          try {
+            await clearServiceAccount({
+              service: "reg",
+              identifier: result.email || email,
+            });
+          } catch (syncError) {
+            console.warn("[SYNC members] reg clear:", {
+              message:
+                syncError instanceof Error
+                  ? syncError.message
+                  : String(syncError),
+            });
+          }
 
           console.log("[API REG DELETE] Ящик удалён:", {
             email: result.email,
@@ -617,8 +760,9 @@ async function handleRequest(request, env, ctx) {
 
         try {
           const body = await request.json();
+          const loginId = body.loginId || body.nickname;
           const user = await createCloudContactUser(env, type, {
-            loginId: body.loginId || body.nickname,
+            loginId,
             password: body.password,
             email: body.email,
             firstName: body.firstName,
@@ -628,9 +772,52 @@ async function handleRequest(request, env, ctx) {
             roles: body.roles,
           });
 
+          try {
+            const ccUsername = String(loginId || "")
+              .trim()
+              .toLowerCase();
+            const ccFio = [body.lastName, body.firstName]
+              .map((part) => String(part || "").trim())
+              .filter(Boolean)
+              .join(" ");
+
+            await setServiceAccount({
+              service: ccColumn(type),
+              username: ccUsername,
+              value: String(loginId || "").trim(),
+              fio: ccFio,
+              email: String(body.email || "").trim(),
+            });
+
+            // Пароль фиксируем в members (зашифрованно).
+            if (body.password) {
+              try {
+                await upsertMember({
+                  username: ccUsername,
+                  fio: ccFio,
+                  password: body.password,
+                });
+              } catch (pwdSyncError) {
+                console.warn("[SYNC members] cloudcontact password:", {
+                  message:
+                    pwdSyncError instanceof Error
+                      ? pwdSyncError.message
+                      : String(pwdSyncError),
+                });
+              }
+            }
+          } catch (syncError) {
+            console.warn("[SYNC members] cloudcontact set:", {
+              message:
+                syncError instanceof Error
+                  ? syncError.message
+                  : String(syncError),
+            });
+          }
+
           console.log("[API CLOUDCONTACT CREATE] Пользователь создан:", {
             type,
-            loginId: body.loginId || body.nickname,
+            loginId,
             by: session.username,
           });
 
@@ -675,6 +862,20 @@ async function handleRequest(request, env, ctx) {
 
         try {
           const result = await deleteCloudContactUser(env, type, loginId);
+
+          try {
+            await clearServiceAccount({
+              service: ccColumn(type),
+              identifier: loginId,
+            });
+          } catch (syncError) {
+            console.warn("[SYNC members] cloudcontact clear:", {
+              message:
+                syncError instanceof Error
+                  ? syncError.message
+                  : String(syncError),
+            });
+          }
 
           console.log("[API CLOUDCONTACT DELETE] Пользователь удалён:", {
             type,
@@ -1052,6 +1253,46 @@ async function handleRequest(request, env, ctx) {
             expiresIn: body.expires_in,
           });
 
+          try {
+            const vpnEmail = String(body.email || "").trim().toLowerCase();
+            const vpnUsername = vpnEmail.split("@")[0];
+
+            if (vpnUsername) {
+              await setServiceAccount({
+                service: "vpn",
+                username: vpnUsername,
+                value: vpnEmail,
+                fio: String(body.name || "").trim(),
+                email: vpnEmail,
+              });
+
+              // Пароль фиксируем в members (зашифрованно).
+              if (body.password) {
+                try {
+                  await upsertMember({
+                    username: vpnUsername,
+                    fio: String(body.name || "").trim(),
+                    password: body.password,
+                  });
+                } catch (pwdSyncError) {
+                  console.warn("[SYNC members] vpn password:", {
+                    message:
+                      pwdSyncError instanceof Error
+                        ? pwdSyncError.message
+                        : String(pwdSyncError),
+                  });
+                }
+              }
+            }
+          } catch (syncError) {
+            console.warn("[SYNC members] vpn set:", {
+              message:
+                syncError instanceof Error
+                  ? syncError.message
+                  : String(syncError),
+            });
+          }
+
           console.log("[API VPN CREATE] Пользователь приглашён:", {
             email: body.email,
             groups: (body.auto_groups || []).length,
@@ -1090,6 +1331,26 @@ async function handleRequest(request, env, ctx) {
 
         try {
           const result = await deleteVpnUser(env, userId);
+
+          const vpnEmail = String(url.searchParams.get("email") || "")
+            .trim()
+            .toLowerCase();
+
+          if (vpnEmail) {
+            try {
+              await clearServiceAccount({
+                service: "vpn",
+                identifier: vpnEmail,
+              });
+            } catch (syncError) {
+              console.warn("[SYNC members] vpn clear:", {
+                message:
+                  syncError instanceof Error
+                    ? syncError.message
+                    : String(syncError),
+              });
+            }
+          }
 
           console.log("[API VPN DELETE] Пользователь удалён:", {
             userId,

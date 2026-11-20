@@ -245,7 +245,7 @@ async function onDelete(row) {
   loading.value = true
 
   try {
-    await deleteUser(row.id)
+    await deleteUser(row.id, row.email)
     ElMessage.success(`Пользователь «${row.email}» удален`)
     await load()
   } catch (err) {

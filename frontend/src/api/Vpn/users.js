@@ -133,9 +133,13 @@ export async function deleteInvite(inviteId) {
 }
 
 // Удалить пользователя VPN (NetBird).
-export async function deleteUser(userId) {
+export async function deleteUser(userId, email) {
+  const params = new URLSearchParams()
+  if (email) params.set('email', email)
+
+  const qs = params.toString()
   const response = await fetch(
-    `/api/vpn/users/${encodeURIComponent(userId)}/deleteusr`,
+    `/api/vpn/users/${encodeURIComponent(userId)}/deleteusr${qs ? `?${qs}` : ''}`,
     {
       method: "POST",
       credentials: "same-origin",

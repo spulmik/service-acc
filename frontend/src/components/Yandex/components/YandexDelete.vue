@@ -81,7 +81,7 @@ async function confirmDelete() {
   loading.value = true
 
   try {
-    await deleteUser(props.user.id)
+    await deleteUser(props.user.id, props.user.email)
 
     dialogVisible.value = false
     ElMessage.success(`Пользователь «${userName.value}» удалён`)

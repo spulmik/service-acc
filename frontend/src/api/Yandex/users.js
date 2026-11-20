@@ -41,9 +41,13 @@ export async function createUser(userData) {
   return data;
 }
 
-export async function deleteUser(userId) {
+export async function deleteUser(userId, email) {
+  const params = new URLSearchParams()
+  if (email) params.set('email', email)
+
+  const qs = params.toString()
   const response = await fetch(
-    `/api/yandex/users/${encodeURIComponent(userId)}`,
+    `/api/yandex/users/${encodeURIComponent(userId)}${qs ? `?${qs}` : ''}`,
     {
       method: 'DELETE',
       credentials: 'same-origin',

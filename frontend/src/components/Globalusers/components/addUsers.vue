@@ -573,6 +573,15 @@ async function submitForm() {
     }
 
     try {
+      // CloudContact: колонка зависит от выбранного инстанса (osn/msp/back),
+      // а в members храним loginId (= nickname), а не email.
+      const ccColumnByService = {
+        osn: 'cloudcontact',
+        msp: 'cloudcontact_msp',
+        back: 'cloudcontact_back',
+      }
+      const ccMemberColumn = ccColumnByService[form.value.ccService] || 'cloudcontact'
+
       await saveMember({
         fio,
         username: nickname,
@@ -582,7 +591,8 @@ async function submitForm() {
         position: form.value.position.trim(),
         yandex: isYandex.value ? email : '',
         reg: isYandex.value ? '' : email,
-        cloudcontact: isCloud.value ? email : '',
+        vpn: isVpn.value ? email : '',
+        [ccMemberColumn]: isCloud.value ? nickname : '',
         vpngroups: vpnGroupNames,
       })
     } catch (saveError) {
