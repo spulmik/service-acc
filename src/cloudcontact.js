@@ -416,6 +416,63 @@ export async function createCloudContactUser(env, type, data = {}) {
   return result;
 }
 
+// Блокировка / разблокировка пользователя BrightPattern.
+// PUT /configapi/v2/user/{loginId} с полем disabled (true — заблокировать).
+export async function blockCloudContactUser(env, type, loginId, blocked = true) {
+  const tenant = getTenant(type);
+  const id = String(loginId || "").trim();
+
+  if (!id) {
+    throw new Error("Укажите логин пользователя");
+  }
+
+  const url = `https://${tenant.host}/configapi/v2/user/${encodeURIComponent(id)}`;
+  const doBlock = (tok) =>
+    fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${tok}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ disabled: Boolean(blocked) }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+  let token = await getCloudContactToken(env, type);
+  let response = await doBlock(token);
+
+  if (response.status === 401) {
+    token = await getCloudContactToken(env, type, true);
+    response = await doBlock(token);
+  }
+
+  const rawText = await response.text().catch(() => "");
+
+  if (!response.ok) {
+    console.error("[CloudContact] block user отклонён", {
+      type,
+      loginId: id,
+      blocked: Boolean(blocked),
+      status: response.status,
+      response: rawText ? rawText.slice(0, 500) : "",
+    });
+
+    throw new Error(
+      `CloudContact ${blocked ? "block" : "unblock"} user HTTP ${response.status}${rawText ? `: ${rawText.slice(0, 300)}` : ""}`,
+    );
+  }
+
+  // Сбрасываем кэш списка — статус должен обновиться.
+  const store = getStore(env);
+  if (store) {
+    await store.delete(`cc:users:${type}`).catch(() => {});
+  }
+
+  return { ok: true };
+}
+
+
 // Удаление пользователя BrightPattern. DELETE /configapi/v2/user/{loginId}.
 export async function deleteCloudContactUser(env, type, loginId) {
   const tenant = getTenant(type);

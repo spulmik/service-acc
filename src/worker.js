@@ -17,6 +17,7 @@ import {
   getUsedExtensions,
   createCloudContactUser,
   deleteCloudContactUser,
+  blockCloudContactUser,
 } from "./cloudcontact.js";
 import {
   listRoles as listCcRoles,
@@ -702,6 +703,60 @@ async function handleRequest(request, env, ctx) {
         }
       }
       
+      // 5.6f. CloudContact — блкоировка пользователя через update в тенанте.
+      // PUT /api/cloudcontact/{type}/{loginId}
+      if (
+        pathname.startsWith("/api/cloudcontact/") &&
+        request.method === "PUT"
+      ) {
+        if (!isMembersAllowed(env, session.username)) {
+          return jsonAuthResponse({ error: "Нет доступа" }, 403);
+        }
+
+        const rest = pathname.slice("/api/cloudcontact/".length);
+        const type = rest.split("/")[0];
+        const loginId = decodeURIComponent(
+          rest.split("/").slice(1).join("/"),
+        );
+
+        if (!loginId) {
+          return jsonAuthResponse({ error: "Не указан логин" }, 400);
+        }
+
+        try {
+          const body = await request.json().catch(() => ({}));
+          const blocked = body.blocked === undefined ? true : Boolean(body.blocked);
+          const result = await blockCloudContactUser(env, type, loginId, blocked);
+
+          console.log("[API CLOUDCONTACT PUT] Статус пользователя изменён:", {
+            type,
+            loginId,
+            blocked,
+            by: session.username,
+          });
+
+          return jsonAuthResponse(result);
+        } catch (error) {
+          console.error("[API CLOUDCONTACT PUT] Ошибка:", {
+            type,
+            loginId,
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось заблокировать пользователя CloudContact",
+            },
+            502,
+          );
+        }
+      }
+      
+
       // 5.7. CloudContact (BrightPattern) — список пользователей по типу.
       if (
         pathname.startsWith("/api/cloudcontact/") &&

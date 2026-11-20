@@ -101,6 +101,12 @@
                 <el-dropdown-item command="delete" class="is-danger">
                   <el-icon><Delete /></el-icon>Удалить
                 </el-dropdown-item>
+                <el-dropdown-item
+                  command="block"
+                  :class="{ 'is-danger': !row.disabled }"
+                >
+                  <el-icon><CircleClose /></el-icon>{{ row.disabled ? 'Разблокировать' : 'Заблокировать' }}
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -124,8 +130,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, MoreFilled, Delete } from '@element-plus/icons-vue'
-import { getUsers, deleteUser } from '@/api/CloudContact/users.js'
+import { Search, MoreFilled, Delete, CircleClose} from '@element-plus/icons-vue'
+import { getUsers, deleteUser, blockUser } from '@/api/CloudContact/users.js'
 import { initial, avatarColor } from '@/utils/format.js'
 
 const props = defineProps({
@@ -151,6 +157,52 @@ function fullName(row) {
 
 function onCommand(command, row) {
   if (command === 'delete') onDelete(row)
+  else if(command === 'block') onBlock(row)
+}
+
+async function onBlock(row) {
+  if (!row.loginId) {
+    ElMessage.error('У пользователя нет логина')
+    return
+  }
+
+  const label = fullName(row) || row.loginId
+  const willBlock = !row.disabled
+
+  try {
+    await ElMessageBox.confirm(
+      willBlock
+        ? `Заблокировать пользователя «${label}» (${row.loginId})?`
+        : `Разблокировать пользователя «${label}» (${row.loginId})?`,
+      willBlock ? 'Блокировка пользователя' : 'Разблокировка пользователя',
+      {
+        type: 'warning',
+        confirmButtonText: willBlock ? 'Заблокировать' : 'Разблокировать',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: willBlock ? 'el-button--danger' : '',
+      },
+    )
+  } catch {
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await blockUser(props.type, row.loginId, willBlock)
+    ElMessage.success(
+      willBlock
+        ? `Пользователь «${label}» заблокирован`
+        : `Пользователь «${label}» разблокирован`,
+    )
+    await load(true)
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось изменить статус пользователя',
+    )
+  } finally {
+    loading.value = false
+  }
 }
 
 async function onDelete(row) {

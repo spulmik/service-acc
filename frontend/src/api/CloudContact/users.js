@@ -103,6 +103,33 @@ export async function createUser(type, userData) {
   return data;
 }
 
+// Блокировка / разблокировка: PUT /api/cloudcontact/{type}/{loginId}
+// с телом { blocked }. blocked=true — заблокировать.
+export async function blockUser(type, id, blocked) {
+  const response = await fetch(
+    `${baseUrl(type)}/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ blocked: Boolean(blocked) }),
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка изменения статуса: HTTP ${response.status}`,
+    );
+  }
+
+  return data;
+}
+
 export async function deleteUser(type, id) {
   const response = await fetch(
     `${baseUrl(type)}/${encodeURIComponent(id)}`,
