@@ -59,6 +59,19 @@
         min-width="180"
         show-overflow-tooltip
       />
+
+      <el-table-column label="Статус" min-width="130">
+        <template #default="{ row }">
+          <span class="status">
+            <span
+              class="status-dot"
+              :class="row.is_blocked ? 'is-blocked' : 'is-active'"
+            ></span>
+            {{ row.is_blocked ? 'Отключён' : 'Активен' }}
+          </span>
+        </template>
+      </el-table-column>
+
       <el-table-column label="" width="60" align="center">
         <template #default="{ row }">
           <el-dropdown
@@ -79,14 +92,14 @@
 
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="delete" class="is-danger">
+                  <el-icon><Delete /></el-icon>Удалить
+                </el-dropdown-item>
                 <el-dropdown-item
                   command="block"
                   :class="{ 'is-danger': !row.is_blocked }"
                 >
-                  <el-icon><CircleClose /></el-icon>{{ row.is_blocked ? 'Unblock' : 'Block' }}
-                </el-dropdown-item>
-                <el-dropdown-item command="delete" class="is-danger">
-                  <el-icon><Delete /></el-icon>Delete
+                  <el-icon><CircleClose /></el-icon>{{ row.is_blocked ? 'Разблокировать' : 'Заблокировать' }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -237,8 +250,9 @@ const filterTableData = computed(() => {
   }
 
   return tableData.value.filter((item) =>
-    item.email.toLowerCase().includes(query) ||
-    item.username.toLowerCase().includes(query)
+    (item.email || '').toLowerCase().includes(query) ||
+    (item.username || '').toLowerCase().includes(query) ||
+    (item.is_blocked ? 'отключён' : 'активен').includes(query)
   )
 })
 
@@ -326,6 +340,28 @@ onMounted(loadMailboxes)
 
 .search-input {
   width: 300px;
+}
+
+/* STATUS: точка + текст — как в CloudContact и ВПН */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-text-color-secondary);
+}
+
+.status-dot.is-active {
+  background: var(--el-color-success);
+}
+
+.status-dot.is-blocked {
+  background: var(--el-color-danger);
 }
 
 .table-alert {
