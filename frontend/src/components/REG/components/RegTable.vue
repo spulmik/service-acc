@@ -79,9 +79,12 @@
 
             <template #dropdown>
               <el-dropdown-menu>
-                <!-- Пункт «Block» убран: в ISPmanager блокировка ящика пока
-                     не реализована. Вернуть, когда появится
-                     setRegUserBlocked + роут PUT /api/reg/mailboxes/:email. -->
+                <el-dropdown-item
+                  command="block"
+                  :class="{ 'is-danger': !row.is_blocked }"
+                >
+                  <el-icon><CircleClose /></el-icon>{{ row.is_blocked ? 'Unblock' : 'Block' }}
+                </el-dropdown-item>
                 <el-dropdown-item command="delete" class="is-danger">
                   <el-icon><Delete /></el-icon>Delete
                 </el-dropdown-item>
@@ -118,8 +121,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox} from 'element-plus'
-import { Search, Plus, MoreFilled, Delete } from '@element-plus/icons-vue'
-import { getMailboxes, deleteUser } from '@/api/Reg/users.js'
+import { Search, Plus, MoreFilled, Delete, CircleClose } from '@element-plus/icons-vue'
+import { getMailboxes, deleteUser, blockUser } from '@/api/Reg/users.js'
 // import RegDelete from './RegDelete.vue'
 import RegAdd from './RegAdd.vue'
 // import {  } from "@/utils/format.js";
@@ -136,8 +139,55 @@ const pageSize = ref(20)
 
 function onCommand(command, row) {
   if (command === 'delete') onDelete(row)
+  else if (command === 'block') onBlock(row)
 }
 
+// Блокировка / разблокировка: is_blocked приходит с бэкенда (ISPmanager
+// disabled=on), поэтому одна и та же кнопка переключает статус.
+async function onBlock(row) {
+  if (!row.email) {
+    ElMessage.error('У пользователя нет email')
+    return
+  }
+
+  const willBlock = !row.is_blocked
+
+  try {
+    await ElMessageBox.confirm(
+      willBlock
+        ? `Заблокировать пользователя «${row.email}»? Он потеряет доступ к почте.`
+        : `Разблокировать пользователя «${row.email}»?`,
+      willBlock ? 'Блокировка пользователя' : 'Разблокировка пользователя',
+      {
+        type: 'warning',
+        confirmButtonText: willBlock ? 'Заблокировать' : 'Разблокировать',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: willBlock ? 'el-button--danger' : '',
+      }
+    )
+  } catch {
+    // Пользователь отменил действие.
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await blockUser(row.email, willBlock)
+    ElMessage.success(
+      willBlock
+        ? `Пользователь «${row.email}» заблокирован`
+        : `Пользователь «${row.email}» разблокирован`
+    )
+    await loadMailboxes()
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось изменить статус пользователя'
+    )
+  } finally {
+    loading.value = false
+  }
+}
 
 
 async function onDelete(row) {

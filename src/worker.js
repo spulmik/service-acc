@@ -9,6 +9,7 @@ import {
   getMailboxes,
   createRegUser,
   deleteRegUser,
+  setRegUserBlocked,
 } from "./reg.js";
 
 import {
@@ -462,7 +463,10 @@ async function handleRequest(request, env, ctx) {
           });
 
           // ISPmanager возвращает данные в формате:
-          // { doc: { elem: [{ name: { $: "username@domain" } }, ...] } }
+          // { doc: { elem: [{ name: { $: "username@domain" },
+          //                    active: { $: "on"|"off" } }, ...] } }
+          // active="off" — ящик отключён (заблокирован). Без этого поля
+          // фронт не знал статус и всегда показывал «Block».
           const mailboxes = Array.isArray(result?.doc?.elem)
             ? result.doc.elem.map((item) => {
                 // Полный email из ISPmanager
@@ -470,9 +474,23 @@ async function handleRequest(request, env, ctx) {
                 // Логин до @
                 const username = fullEmail.split("@")[0];
 
+                const activeRaw = item?.active;
+                const disabledRaw = item?.disabled;
+
+                const activeState = String(
+                  activeRaw?.$ ?? activeRaw ?? "",
+                ).toLowerCase();
+                const disabledState = String(
+                  disabledRaw?.$ ?? disabledRaw ?? "",
+                ).toLowerCase();
+
                 return {
                   username,
                   email: fullEmail,
+                  // Поддержаны оба варианта поля: active="off" (ISPmanager 6)
+                  // и disabled="on" (пятёрка).
+                  is_blocked:
+                    activeState === "off" || disabledState === "on",
                 };
               })
             : [];
@@ -578,6 +596,55 @@ async function handleRequest(request, env, ctx) {
                 error instanceof Error
                   ? error.message
                   : "Не удалось создать почтовый ящик",
+            },
+            400,
+          );
+        }
+      }
+      // 5.6.0. Блокировка / разблокировка почтового ящика Reg.ru (ISPmanager).
+      // PUT /api/reg/mailboxes/{email} с телом { blocked }.
+      if (
+        pathname.startsWith("/api/reg/mailboxes/") &&
+        request.method === "PUT"
+      ) {
+        const email = decodeURIComponent(
+          pathname.slice("/api/reg/mailboxes/".length),
+        );
+
+        if (!email) {
+          return jsonAuthResponse({ error: "Не указан email ящика" }, 400);
+        }
+
+        try {
+          const body = await request.json().catch(() => ({}));
+          const blocked =
+            body.blocked === undefined ? true : Boolean(body.blocked);
+
+          const result = await setRegUserBlocked(env, email, blocked);
+
+          // Блокировка НЕ удаляет учётку: колонку reg в members не трогаем.
+          console.log("[API REG PUT] Статус ящика изменён:", {
+            email: result.email,
+            blocked: result.blocked,
+            username: session.username,
+          });
+
+          return jsonAuthResponse(result);
+        } catch (error) {
+          console.error("[API REG PUT] Ошибка:", {
+            email,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось изменить статус почтового ящика",
             },
             400,
           );

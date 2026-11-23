@@ -185,6 +185,81 @@ export async function deleteRegUser(env, email) {
 }
 
 // ==========================================
+// Блокировка / разблокировка почты по Reg.ru (ISPmanager 6)
+// ==========================================
+// В этой сборке панели отдельные функции для доступности ящика:
+//   email.suspend — отключить ящик (блокировка)
+//   email.resume  — включить ящик  (разблокировка)
+// Передаём только elid + sok. Лишние поля (aliases="-", passwd) панель
+// валидирует и отвергает: «Поле 'Псевдонимы' имеет недопустимое значение».
+//
+// Статус для списка берём из поля active ("on"/"off") в func=email.
+export async function setRegUserBlocked(env, email, blocked = true) {
+  if (!env.USER_REG || !env.PASSWD_REG) {
+    throw new Error("Не настроены учётные данные ISPmanager");
+  }
+
+  const elid = String(email || "").trim().toLowerCase();
+
+  if (!/^[a-z0-9._-]+@[a-z0-9.-]+$/.test(elid)) {
+    throw new Error("Некорректный адрес почтового ящика");
+  }
+
+  // Блокировка — email.suspend, разблокировка — email.resume.
+  const func = blocked ? "email.suspend" : "email.resume";
+
+  const response = await fetch("https://server101.hosting.reg.ru:1500/ispmgr", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      authinfo: `${env.USER_REG}:${env.PASSWD_REG}`,
+      func,
+      elid,
+      sok: "ok",
+      out: "json",
+      lang: "ru",
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`ISPmanager HTTP ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!data) {
+    throw new Error("ISPmanager вернул некорректный ответ");
+  }
+
+  if (data?.doc?.error) {
+    const message =
+      data.doc.error?.msg?.$ ||
+      (blocked
+        ? "Не удалось заблокировать почтовый ящик"
+        : "Не удалось разблокировать почтовый ящик");
+
+    console.error("[ISPmanager] Ошибка изменения статуса ящика:", {
+      func,
+      email: elid,
+      message,
+    });
+
+    throw new Error(message);
+  }
+
+  console.log("[ISPmanager] Статус ящика изменён:", {
+    func,
+    email: elid,
+    blocked: Boolean(blocked),
+  });
+
+  return { email: elid, blocked: Boolean(blocked) };
+}
+
+// ==========================================
 // UUID по Рег.ру
 // ==========================================
 export function getNextUuid(result, access, projectId) {

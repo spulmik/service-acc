@@ -42,9 +42,32 @@ export async function createUser(userData) {
     }
   return data
 }
-// Блокировка ящика в ISPmanager пока не реализована: в меню таблицы Reg
-// пункт Block убран. Когда появится setRegUserBlocked на бэкенде и роут
-// PUT /api/reg/mailboxes/:email — добавить сюда функцию blockUser(email, blocked).
+// Блокировка / разблокировка ящика (ISPmanager email.edit disabled=on|off).
+// PUT /api/reg/mailboxes/{email} с телом { blocked }.
+export async function blockUser(email, blocked = true) {
+  const response = await fetch(
+    `/api/reg/mailboxes/${encodeURIComponent(email)}`,
+    {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ blocked: Boolean(blocked) }),
+    }
+  );
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || `Ошибка блокировки ящика: HTTP ${response.status}`
+    );
+  }
+
+  return data;
+}
 
 export async function deleteUser(email) {
   const response = await fetch(
