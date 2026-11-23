@@ -59,24 +59,37 @@
         min-width="180"
         show-overflow-tooltip
       />
-      <el-table-column
-        label="Действия"
-        width="250"
-        align="right"
-        fixed="right"
-        >
+      <el-table-column label="" width="60" align="center">
         <template #default="{ row }">
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            popper-class="vpn-row-menu"
+            @command="(cmd) => onCommand(cmd, row)"
+          >
             <el-button
-            size="small"
-            @click="handleEdit(row)"
-            >Изменить
+              text
+              circle
+              size="small"
+              class="row-actions"
+              @click.stop
+            >
+              <el-icon :size="18"><MoreFilled /></el-icon>
             </el-button>
-            <RegDelete
-            :user="row"
-            @deleted="loadMailboxes"
-            />
+
+            <template #dropdown>
+              <el-dropdown-menu>
+                <!-- Пункт «Block» убран: в ISPmanager блокировка ящика пока
+                     не реализована. Вернуть, когда появится
+                     setRegUserBlocked + роут PUT /api/reg/mailboxes/:email. -->
+                <el-dropdown-item command="delete" class="is-danger">
+                  <el-icon><Delete /></el-icon>Delete
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
-        </el-table-column>
+      </el-table-column>
     </el-table>
 
     <div class="table-footer">
@@ -104,11 +117,12 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
-import { getMailboxes } from '@/api/Reg/users.js'
-import RegDelete from './RegDelete.vue'
+import { ElMessage, ElMessageBox} from 'element-plus'
+import { Search, Plus, MoreFilled, Delete } from '@element-plus/icons-vue'
+import { getMailboxes, deleteUser } from '@/api/Reg/users.js'
+// import RegDelete from './RegDelete.vue'
 import RegAdd from './RegAdd.vue'
+// import {  } from "@/utils/format.js";
 
 const search = ref('')
 const tableData = ref([])
@@ -118,6 +132,52 @@ const showAddDialog = ref(false)
 const selectedDomain = ref('energy-team.club')
 const currentPage = ref(1)
 const pageSize = ref(20)
+
+
+function onCommand(command, row) {
+  if (command === 'delete') onDelete(row)
+}
+
+
+
+async function onDelete(row) {
+  // У ящика ISPmanager нет числового ID: он идентифицируется полным адресом.
+  if (!row.email) {
+    ElMessage.error('У пользователя нет email')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `Удалить пользователя «${row.email}»? Пользователь будет удалён из системы.`,
+      'Удаление пользователя',
+      {
+        type: 'warning',
+        confirmButtonText: 'Удалить',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    // Пользователь отменил удаление.
+    return
+  }
+
+  loading.value = true
+
+  try {
+    await deleteUser(row.email)
+    ElMessage.success(`Пользователь «${row.email}» удален`)
+    await loadMailboxes()
+  } catch (err) {
+    ElMessage.error(
+      err instanceof Error ? err.message : 'Не удалось удалить пользователя'
+    )
+  } finally {
+    loading.value = false
+  }
+}
+
 
 const filterTableData = computed(() => {
   const query = search.value.toLowerCase().trim()
@@ -145,10 +205,10 @@ watch([search, pageSize], () => {
   currentPage.value = 1
 })
 
-function handleEdit(row) {
-  console.log('Редактирование пользователя:', row)
-  ElMessage.info('Редактирование пока не реализовано')
-}
+// function handleEdit(row) {
+//   console.log('Редактирование пользователя:', row)
+//   ElMessage.info('Редактирование пока не реализовано')
+// }
 
 function addUserReg() {
   showAddDialog.value = true

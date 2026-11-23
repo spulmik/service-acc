@@ -348,10 +348,11 @@ async function handleRequest(request, env, ctx) {
             const nickname = String(body.nickname || "")
               .trim()
               .toLowerCase();
-            const fio = [body.name?.last, body.name?.first, body.name?.middle]
-              .map((part) => String(part || "").trim())
-              .filter(Boolean)
-              .join(" ");
+            const fio =
+              [body.name?.last, body.name?.first, body.name?.middle]
+                .map((part) => String(part || "").trim())
+                .filter(Boolean)
+                .join(" ") || nickname;
 
             await setServiceAccount({
               service: "yandex",
@@ -519,12 +520,15 @@ async function handleRequest(request, env, ctx) {
             const regUsername = String(result.username || "")
               .trim()
               .toLowerCase();
+            // ФИО берём из формы; если не передали — фолбэк на логин
+            // (колонка fio в БД NOT NULL).
+            const regFio = String(body.fio || "").trim() || regUsername;
 
             await setServiceAccount({
               service: "reg",
               username: regUsername,
               value: result.email,
-              fio: regUsername,
+              fio: regFio,
               email: result.email,
             });
 
@@ -533,7 +537,7 @@ async function handleRequest(request, env, ctx) {
               try {
                 await upsertMember({
                   username: regUsername,
-                  fio: regUsername,
+                  fio: regFio,
                   password: body.password,
                 });
               } catch (pwdSyncError) {
@@ -776,10 +780,13 @@ async function handleRequest(request, env, ctx) {
             const ccUsername = String(loginId || "")
               .trim()
               .toLowerCase();
-            const ccFio = [body.lastName, body.firstName]
-              .map((part) => String(part || "").trim())
-              .filter(Boolean)
-              .join(" ");
+            // ФИО из формы (Фамилия + Имя); пусто → фолбэк на логин,
+            // иначе NOT NULL constraint в members.
+            const ccFio =
+              [body.lastName, body.firstName]
+                .map((part) => String(part || "").trim())
+                .filter(Boolean)
+                .join(" ") || ccUsername;
 
             await setServiceAccount({
               service: ccColumn(type),
@@ -1256,13 +1263,15 @@ async function handleRequest(request, env, ctx) {
           try {
             const vpnEmail = String(body.email || "").trim().toLowerCase();
             const vpnUsername = vpnEmail.split("@")[0];
+            // Пустое имя → фолбэк на логин (fio в БД NOT NULL).
+            const vpnFio = String(body.name || "").trim() || vpnUsername;
 
             if (vpnUsername) {
               await setServiceAccount({
                 service: "vpn",
                 username: vpnUsername,
                 value: vpnEmail,
-                fio: String(body.name || "").trim(),
+                fio: vpnFio,
                 email: vpnEmail,
               });
 
@@ -1271,7 +1280,7 @@ async function handleRequest(request, env, ctx) {
                 try {
                   await upsertMember({
                     username: vpnUsername,
-                    fio: String(body.name || "").trim(),
+                    fio: vpnFio,
                     password: body.password,
                   });
                 } catch (pwdSyncError) {

@@ -225,6 +225,7 @@ async function submitForm() {
     //   departmentId: 1,
       nickname: form.value.nickname.toLowerCase().trim(),
       password: form.value.password,
+      fio: form.value.fio.trim(),
     //   name: {
     //     first: form.value.firstName.trim(),
     //     last: form.value.lastName.trim(),
