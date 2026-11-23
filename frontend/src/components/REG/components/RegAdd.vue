@@ -15,6 +15,15 @@
       label-width="120px"
       label-position="left"
     >
+      <el-form-item label="ФИО" prop="fio">
+        <el-input
+          v-model="form.fio"
+          placeholder="Иванов Иван Иванович"
+          :disabled="loading"
+          clearable
+        />
+      </el-form-item>
+
       <el-form-item label="Никнейм" prop="nickname">
         <el-input
           v-model="form.nickname"
@@ -128,6 +137,7 @@ const loading = ref(false)
 const formRef = ref(null)
 
 const form = ref({
+  fio: '',
   nickname: '',
   password: '',
 //   firstName: '',
@@ -137,6 +147,10 @@ const form = ref({
 })
 
 const rules = {
+  fio: [
+    {required: true, message: 'Укажите ФИО', trigger: 'blur'},
+    {min: 3, message: 'Минимум 3 символа', trigger: 'blur'},
+  ],
   nickname: [
     { required: true, message: 'Укажите никнейм', trigger: 'blur' },
     {
@@ -175,6 +189,7 @@ watch(visible, (newVal) => {
 function resetForm() {
   formRef.value?.resetFields()
   form.value = {
+    fio: '',
     nickname: '',
     password: '',
     // firstName: '',

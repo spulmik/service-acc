@@ -71,7 +71,7 @@ export async function getMailboxes(env, domainname) {
 // ==========================================
 // Создание почты по Reg.ru (ISPmanager)
 // ==========================================
-export async function createRegUser(env, { nickname, password, domain = "energy-team.club" }) {
+export async function createRegUser(env, { name, nickname, password, domain = "energy-team.club" }) {
   if (!env.USER_REG || !env.PASSWD_REG) {
     throw new Error("Не настроены учётные данные ISPmanager");
   }

@@ -19,7 +19,7 @@
       <el-button
         :loading="loading"
         @click="addUserReg"
-        icon=""><el-icon><Plus /></el-icon>
+        ><el-icon><Plus /></el-icon>
       </el-button>
 
       <el-button

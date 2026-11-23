@@ -21,6 +21,7 @@ export async function getMailboxes(domain = "energy-team.club") {
 
   return data;
 }
+// Создание почты
 export async function createUser(userData) {
   const response = await fetch("/api/reg/mailboxes",
     {
