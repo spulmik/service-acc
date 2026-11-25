@@ -212,6 +212,10 @@ export async function addVpnUser(
 // invite_token (старая ссылка перестаёт работать).
 // POST {base}/api/users/invites/{inviteId}/regenerate
 // Док: https://docs.netbird.io/api/resources/users
+//
+// Возвращает ДВА объекта:
+//   invite — публичные поля (без токена), их можно отдавать в браузер;
+//   secret — { invite_token }, только для серверных нужд (письмо со ссылкой).
 export async function regenerateVpnInvite(env, inviteId) {
   const token = getToken(env);
   const id = String(inviteId || "").trim();
@@ -242,8 +246,12 @@ export async function regenerateVpnInvite(env, inviteId) {
 
   const data = await response.json().catch(() => null);
 
-  // invite_token наружу не отдаём — только публичные поля.
-  return data ? toPublicVpnInvite(data) : null;
+  return {
+    // invite_token наружу НЕ отдаём — только публичные поля.
+    invite: data ? toPublicVpnInvite(data) : null,
+    // Секретная часть: доступна только серверному коду.
+    secret: { invite_token: data?.invite_token || "" },
+  };
 }
 
 // Удаление приглашения NetBird

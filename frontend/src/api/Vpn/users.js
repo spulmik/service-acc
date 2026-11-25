@@ -90,13 +90,18 @@ export async function addUser({
 
 // Перегенерировать приглашение NetBird (продлить срок, выдать новый токен).
 // Старая ссылка-приглашение после этого перестаёт работать.
-export async function regenerateInvite(inviteId) {
+// email и name передаём в теле, т.к. NetBird при regenerate их не возвращает.
+export async function regenerateInvite(inviteId, { email, name } = {}) {
   const response = await fetch(
     `/api/vpn/inviteusers/${encodeURIComponent(inviteId)}/regenerate`,
     {
       method: "POST",
       credentials: "same-origin",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, name }),
     },
   );
 

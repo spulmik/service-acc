@@ -50,6 +50,14 @@ import {
 
 import { listVpnGroups, syncVpnGroups } from "../server/groups.js";
 import {
+  sendMail,
+  isMailConfigured,
+} from "../server/mailer.js";
+import {
+  buildInviteUrl,
+  buildVpnInviteMail,
+} from "../server/vpnMail.js";
+import {
   listPhonePlan,
   assignTeamGroup,
   getRangeForTeam,
@@ -91,6 +99,93 @@ function ccColumn(type) {
 
 // Домен Яндекс 360 — для сбора полного email при синхронизации в members.
 const YANDEX_DOMAIN = "energy-team.ru";
+
+// Отправка письма-приглашения в VPN. Письмо — вспомогательный шаг:
+// его сбой НЕ должен ломать создание приглашения в NetBird. Поэтому все
+// ошибки ловим и только логируем + возвращаем статус вызывающему коду.
+//   email     — адрес получателя (из NetBird)
+//   inviteToken — секретный токен приглашения (в браузер не попадает)
+//   kind      — "invite" (новое) или "regenerated" (перегенерация)
+async function trySendVpnInviteMail({
+  env,
+  email,
+  inviteToken,
+  kind,
+  name,
+  groups = [],
+  expiresAt,
+}) {
+  if (!isMailConfigured()) {
+    console.warn("[MAIL VPN] SMTP не настроен, письмо не отправлено");
+
+    return { sent: false, reason: "smtp_not_configured" };
+  }
+
+  const recipient = String(email || "").trim();
+
+  if (!recipient) {
+    return { sent: false, reason: "no_recipient" };
+  }
+
+  const inviteUrl = buildInviteUrl(inviteToken);
+
+  if (!inviteUrl) {
+    console.warn("[MAIL VPN] Нет invite_token, письмо не отправлено", {
+      email: recipient,
+    });
+
+    return { sent: false, reason: "no_invite_token" };
+  }
+
+  try {
+    const mail = buildVpnInviteMail({
+      kind,
+      name,
+      groups,
+      expiresAt,
+      inviteUrl,
+    });
+
+    const result = await sendMail({
+      to: recipient,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+    });
+
+    const acceptedCount = result.accepted?.length ?? 0;
+    const rejectedCount = result.rejected?.length ?? 0;
+
+    if (acceptedCount === 0 || rejectedCount > 0) {
+      throw new Error(
+        `SMTP не принял письмо для ${recipient} ` +
+          `(accepted=${acceptedCount}, rejected=${rejectedCount})`,
+      );
+    }
+
+    console.log("[MAIL VPN] Письмо отправлено:", {
+      email: recipient,
+      kind,
+      messageId: result.messageId,
+      accepted: acceptedCount,
+    });
+
+    return { sent: true, messageId: result.messageId };
+  } catch (error) {
+    console.error("[MAIL VPN] Не удалось отправить письмо:", {
+      email: recipient,
+      kind,
+      message:
+        error instanceof Error ? error.message : String(error),
+    });
+
+    return {
+      sent: false,
+      reason: "send_failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -1247,14 +1342,31 @@ async function handleRequest(request, env, ctx) {
         );
 
         try {
-          const invite = await regenerateVpnInvite(env, inviteId);
+          const body = await request.json().catch(() => ({}));
+          const { invite, secret } = await regenerateVpnInvite(env, inviteId);
 
           console.log("[API VPN INVITE REGENERATE] Приглашение обновлено:", {
             inviteId,
             username: session.username,
           });
 
-          return jsonAuthResponse({ invite });
+          // NetBird при regenerate не возвращает email — берём из запроса
+          // (фронт передаёт row.email) или из ответа (если вдруг есть).
+          const recipientEmail = body.email || invite?.email;
+
+          // Отправляем новую ссылку на почту: старая уже недействительна,
+          // иначе пользователь останется с нерабочим приглашением.
+          const mail = await trySendVpnInviteMail({
+            env,
+            email: recipientEmail,
+            inviteToken: secret?.invite_token,
+            kind: "regenerated",
+            name: body.name || invite?.name,
+            groups: [],
+            expiresAt: invite?.expires_at,
+          });
+
+          return jsonAuthResponse({ invite, mail });
         } catch (error) {
           console.error("[API VPN INVITE REGENERATE] Ошибка:", {
             inviteId,
@@ -1375,7 +1487,40 @@ async function handleRequest(request, env, ctx) {
             username: session.username,
           });
 
-          return jsonAuthResponse({ user });
+          // Письмо с приглашением — только для режима «Пригласить».
+          // В режиме «Создать» пользователь заводится сразу, ссылка не нужна.
+          let mail = { sent: false, reason: "not_invite_mode" };
+
+          if (body.mode === "invite") {
+            const groupNames = Array.isArray(user?.auto_groups)
+              ? user.auto_groups
+              : [];
+
+            mail = await trySendVpnInviteMail({
+              env,
+              email: user?.email || body.email,
+              inviteToken: user?.invite_token,
+              kind: "invite",
+              name: user?.name || body.name,
+              groups: groupNames,
+              expiresAt: user?.expires_at,
+            });
+          }
+
+          // invite_token наружу НЕ отдаём — только публичные поля + статус письма.
+          return jsonAuthResponse({
+            user: {
+              id: user?.id || "",
+              email: user?.email || "",
+              name: user?.name || "",
+              role: user?.role || "",
+              expires_at: user?.expires_at || "",
+              groups: Array.isArray(user?.auto_groups)
+                ? user.auto_groups.length
+                : 0,
+            },
+            mail,
+          });
         } catch (error) {
           console.error("[API VPN CREATE] Ошибка:", {
             message:
@@ -1867,6 +2012,52 @@ async function handleRequest(request, env, ctx) {
       // чтобы фронтовые кнопки «сгенерировать» не расходились с бэком.
       if (pathname === "/api/password" && request.method === "GET") {
         return jsonAuthResponse({ password: generatePassword(16) });
+      }
+
+      // 5.12. Отправка почты через SMTP (nodemailer).
+      // Доступ только авторизованным. Получатели ограничены доменами из
+      // MAIL_ALLOWED_DOMAINS — иначе приложение станет открытым релеем.
+      if (pathname === "/api/mail/send" && request.method === "POST") {
+        if (!isMailConfigured()) {
+          return jsonAuthResponse(
+            { error: "SMTP не настроен на сервере (MAIL_* в .env)" },
+            503,
+          );
+        }
+
+        try {
+          const body = await request.json();
+
+          const result = await sendMail({
+            to: body.to,
+            subject: body.subject,
+            text: body.text,
+            html: body.html,
+            replyTo: body.replyTo,
+          });
+
+          console.log("[API MAIL SEND] Письмо отправлено:", {
+            to: Array.isArray(body.to) ? body.to.join(", ") : body.to,
+            by: session.username,
+          });
+
+          return jsonAuthResponse(result);
+        } catch (error) {
+          console.error("[API MAIL SEND] Ошибка:", {
+            message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
+
+          return jsonAuthResponse(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Не удалось отправить письмо",
+            },
+            502,
+          );
+        }
       }
 
       // Неизвестные API-маршруты.

@@ -108,6 +108,20 @@ const formRef = ref(null)
 const groups = ref([])
 const groupsLoading = ref(false)
 
+// Человекочитаемая причина, почему письмо не ушло.
+// Причины приходят с бэкенда в поле mail.reason.
+function mailReason(reason) {
+  const map = {
+    smtp_not_configured: 'SMTP не настроен на сервере',
+    no_recipient: 'не указан адрес получателя',
+    no_invite_token: 'NetBird не выдал ссылку-приглашение',
+    send_failed: 'ошибка отправки',
+    not_invite_mode: 'режим «Создать» — ссылка не требуется',
+  }
+
+  return map[reason] || 'неизвестная причина'
+}
+
 const form = ref({
   fio: '',
   email: '',
@@ -189,9 +203,23 @@ async function submitForm() {
 
     ElMessage.success(
       form.value.mode === 'invite'
-        ? `Приглашение для «${email}» отправлено`
+        ? `Приглашение для «${email}» создано`
         : `Пользователь «${email}» создан`
     )
+
+    // Письмо со ссылкой — отдельный шаг: приглашение уже создано,
+    // поэтому ошибку почты показываем предупреждением, а не провалом.
+    if (form.value.mode === 'invite') {
+      const mail = result?.mail
+
+      if (mail?.sent) {
+        ElMessage.success(`Ссылка-приглашение отправлена на ${email}`)
+      } else {
+        ElMessage.warning(
+          `Приглашение создано, но письмо не отправлено (${mailReason(mail?.reason)})`,
+        )
+      }
+    }
 
     visible.value = false
     emit('created', result)

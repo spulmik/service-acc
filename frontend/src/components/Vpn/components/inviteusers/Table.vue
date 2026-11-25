@@ -178,6 +178,18 @@ const error = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 
+// Человекочитаемая причина, почему письмо не ушло.
+function mailReason(reason) {
+  const map = {
+    smtp_not_configured: 'SMTP не настроен на сервере',
+    no_recipient: 'не указан адрес получателя',
+    no_invite_token: 'NetBird не выдал ссылку-приглашение',
+    send_failed: 'ошибка отправки',
+  }
+
+  return map[reason] || 'неизвестная причина'
+}
+
 const filterTableData = computed(() => {
   const query = search.value.trim().toLowerCase()
 
@@ -207,8 +219,26 @@ async function onRegenerate(row) {
   loading.value = true
 
   try {
-    await regenerateInvite(row.id)
+    // Передаём email и name — NetBird при regenerate их не возвращает,
+    // а они нужны для отправки письма с новой ссылкой.
+    const result = await regenerateInvite(row.id, {
+      email: row.email,
+      name: row.name,
+    })
+
     ElMessage.success(`Приглашение для «${row.email}» обновлено`)
+
+    // Старая ссылка уже недействительна — сообщаем, ушла ли новая на почту.
+    const mail = result?.mail
+
+    if (mail?.sent) {
+      ElMessage.success(`Новая ссылка отправлена на ${row.email}`)
+    } else {
+      ElMessage.warning(
+        `Ссылка обновлена, но письмо не отправлено (${mailReason(mail?.reason)})`,
+      )
+    }
+
     await load()
   } catch (err) {
     ElMessage.error(

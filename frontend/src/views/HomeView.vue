@@ -25,16 +25,16 @@
         <el-tab-pane label="Рег" name="Reg" />
         <el-tab-pane label="CloudContact" name="CloudContact" />
         <el-tab-pane label="ВПН" name="Vpn" />
+        <el-tab-pane label="Битрикс24" name="Bitrix" />
       </el-tabs>
 
       <div class="tab-content">
         <AllUsr v-if="canSeeMembers && activeName === 'AllUsr'" />
         <YandexWindow v-if="activeName === 'Yandex'" />
         <RegWindow v-else-if="activeName === 'Reg'" />
-        <CloudContactWindow
-          v-else-if="activeName === 'CloudContact'"
-        />
+        <CloudContactWindow v-else-if="activeName === 'CloudContact'"/>
         <VpnWindow v-else-if="activeName === 'Vpn'" />
+        <BitrixWindow v-else-if="activeName === 'Bitrix'"/>
       </div>
     </el-card>
     <addGlobalAddUser
@@ -52,6 +52,7 @@ import YandexWindow from '@/components/Yandex/YandexWindow.vue'
 import RegWindow from '@/components/REG/RegWindow.vue'
 import CloudContactWindow from '@/components/CloudContact/CloudContactWindow.vue'
 import VpnWindow from '@/components/Vpn/OpenVpnWindow.vue'
+import BitrixWindow from "@/components/Bitrix/BitrixWindow.vue";
 import AllUsr from "@/components/Globalusers/AllUsrs.vue";
 import { getMe } from '@/api/Globalusers/users.js'
 import addGlobalAddUser from '../components/Globalusers/components/AddUsers.vue';
