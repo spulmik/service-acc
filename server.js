@@ -14,12 +14,14 @@ import worker from "./src/worker.js";
 import { createKvRedis } from "./server/kv-redis.js";
 import { createKvFile } from "./server/kv-file.js";
 import { createAssets } from "./server/assets.js";
+import { createFiles } from "./server/files.js";
 import { warmCloudContactCache } from "./src/cloudcontact.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT) || 3000;
 const ASSETS_DIR = process.env.ASSETS_DIR || join(__dirname, "frontend", "dist");
+const FILES_DIR = process.env.FILES_DIR || join(__dirname, "files");
 const DATA_DIR = process.env.DATA_DIR || join(__dirname, ".data");
 
 // --- Хранилище вместо Cloudflare KV ---
@@ -52,6 +54,7 @@ const env = {
   BITRIX_APP_CONFIG: appConfigKv,
   BITRIX_INSTALLS: installsKv,
   ASSETS: createAssets(ASSETS_DIR),
+  FILES: createFiles(FILES_DIR),
 };
 
 // В Workers ctx управляет фоновыми задачами; здесь они не нужны.

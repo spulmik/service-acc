@@ -2067,7 +2067,14 @@ async function handleRequest(request, env, ctx) {
       );
     }
 
-    // 6. Остальные запросы — Vue SPA и статические файлы.
+    // 6. Файлы к письмам (инструкции и т.п.) — публично, без сессии:
+    // получатель письма ещё не авторизован в приложении. Отдаются с
+    // Content-Disposition: attachment, чтобы скачивались по клику.
+    if (pathname.startsWith("/files/") && env.FILES) {
+      return env.FILES.fetch(request);
+    }
+
+    // 7. Остальные запросы — Vue SPA и статические файлы.
     return env.ASSETS.fetch(request);
   } catch (error) {
     console.error("[ROUTER] Необработанная ошибка:", {

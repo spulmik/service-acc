@@ -9,6 +9,22 @@
 // Пока сделано хардкодом, в дальнейшем перенесу данное сообщение и allowed domains для сообщений в настройки приложения
 const DEFAULT_BASE = "https://vpn.energy-team.ru";
 
+// Инструкция по подключению (раздаётся сервером из files/ с
+// Content-Disposition: attachment — скачивается по клику).
+// Имя файла пока хардкодом, в дальнейшем — в настройки приложения.
+const DOC_FILENAME = "docsusrconnect.pdf";
+
+// Абсолютная ссылка на инструкцию: относительная в почтовом клиенте
+// не откроется. База — PUBLIC_ORIGIN (публичный адрес приложения).
+// Если не задан — ссылки нет, чтобы не слать битую кнопку.
+export function buildDocUrl() {
+  const base = String(process.env.PUBLIC_ORIGIN || "")
+    .trim()
+    .replace(/\/+$/, "");
+
+  return base ? `${base}/files/${DOC_FILENAME}` : "";
+}
+
 // Ссылка для принятия приглашения.
 export function buildInviteUrl(inviteToken) {
   const token = String(inviteToken || "").trim();
@@ -66,6 +82,13 @@ export function buildVpnInviteMail({
   const recipient = String(name || "").trim();
   const groupList = Array.isArray(groups) ? groups.filter(Boolean) : [];
   const expiresText = formatExpires(expiresAt);
+  const docUrl = buildDocUrl();
+
+  if (!docUrl) {
+    console.warn(
+      "[MAIL VPN] PUBLIC_ORIGIN не задан — кнопка инструкции в письмо не добавлена",
+    );
+  }
 
   const subject = isRegenerated
     ? "Новая ссылка-приглашение в VPN (старая недействительна)"
@@ -86,6 +109,10 @@ export function buildVpnInviteMail({
     inviteUrl,
     "",
   ];
+
+  if (docUrl) {
+    lines.push(`Инструкция по подключению: ${docUrl}`, "");
+  }
 
   if (groupList.length) {
     lines.push(`Группы доступа: ${groupList.join(", ")}`, "");
@@ -115,10 +142,19 @@ export function buildVpnInviteMail({
         expiresText,
       )}</p>`
     : "";
+  const docHtml = docUrl
+    ? `<p style="margin:0 0 16px">
+    <a href="${escapeHtml(docUrl)}"
+       style="display:inline-block;padding:11px 22px;background:#1f6feb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">
+      Инструкция по подключению
+    </a>
+  </p>`
+    : "";
 
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2328;max-width:600px">
   <p style="margin:0 0 12px">${escapeHtml(greeting)}</p>
   <p style="margin:0 0 16px">${escapeHtml(intro)}</p>
+  ${docHtml}
   <p style="margin:0 0 16px">
     <a href="${escapeHtml(inviteUrl)}"
        style="display:inline-block;padding:11px 22px;background:#1f6feb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">
